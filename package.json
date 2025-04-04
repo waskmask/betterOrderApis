@@ -1,0 +1,35 @@
+{
+  "name": "betterorder_apis",
+  "version": "1.0.0",
+  "description": "betterorder_node_api_backend",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/waskmask/betterOrderApis.git"
+  },
+  "keywords": [
+    "betterorder",
+    "food_delivery_app"
+  ],
+  "author": "waska",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/waskmask/betterOrderApis/issues"
+  },
+  "homepage": "https://github.com/waskmask/betterOrderApis#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.13.1",
+    "multer": "^1.4.5-lts.2",
+    "passport": "^0.7.0",
+    "passport-local": "^1.0.0",
+    "sharp": "^0.33.5",
+    "uuid": "^11.1.0"
+  }
+}
