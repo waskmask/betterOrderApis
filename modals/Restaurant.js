@@ -163,11 +163,13 @@ const restaurantSchema = new mongoose.Schema(
       city: String,
       country: { type: String, default: "Germany" },
     },
-    cuisine_type: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Cuisine",
-      required: true,
-    },
+    cuisine_type: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Cuisine",
+        required: true,
+      },
+    ],
     coordinates: {
       lat: Number,
       lng: Number,
@@ -185,7 +187,8 @@ const restaurantSchema = new mongoose.Schema(
     discount: discountSchema,
     menu: [categorySchema],
     opening_hours: openingHoursSchema,
-    isActive: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: false },
+    visibility: { type: Boolean, default: false },
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     updated_by: [updatedBySchema],
     tokenVersion: { type: Number, default: 0 },
@@ -224,8 +227,9 @@ const generateUsername = async (name) => {
   let base = name
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9\-]/g, "");
+    .replace(/[^a-z0-9\s]/g, "") // remove all except letters, digits, and space
+    .replace(/\s+/g, "-"); // then replace spaces with hyphen
+
   let username = base;
   let count = 0;
 
@@ -257,3 +261,4 @@ const restaurantLogSchema = new mongoose.Schema({
 const RestaurantLog = mongoose.model("RestaurantLog", restaurantLogSchema);
 
 module.exports = { Restaurant, generateUsername, RestaurantLog };
+// we need to add an option for restaurant to upload menu item image

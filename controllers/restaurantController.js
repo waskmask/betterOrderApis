@@ -20,35 +20,55 @@ exports.createRestaurant = async (req, res, next) => {
       cuisine_type,
     } = req.body;
 
-    // check if restaurant is already registered with same name and same address
+    // 🔧 Normalize helper: lowercase, trim, remove extra spaces
+    const normalizeText = (text) =>
+      text.toLowerCase().trim().replace(/\s+/g, " ");
+
+    const normalizedName = normalizeText(restaurant_name);
+    const normalizedAddress = {
+      street: normalizeText(address.street),
+      houseNumber: normalizeText(address.houseNumber),
+      postalCode: address.postalCode.trim(),
+      city: normalizeText(address.city),
+      country: normalizeText(address.country || "Germany"),
+    };
+
+    // 🕵️‍♂️ Check for existing restaurant with same normalized name + address
     const existingRestaurant = await Restaurant.findOne({
-      restaurant_name: restaurant_name.trim(),
-      "address.street": address.street.trim(),
-      "address.houseNumber": address.houseNumber.trim(),
-      "address.postalCode": address.postalCode.trim(),
-      "address.city": address.city.trim(),
-      "address.country": address.country?.trim() || "Germany",
+      restaurant_name: normalizedName,
+      "address.street": normalizedAddress.street,
+      "address.houseNumber": normalizedAddress.houseNumber,
+      "address.postalCode": normalizedAddress.postalCode,
+      "address.city": normalizedAddress.city,
+      "address.country": normalizedAddress.country,
     });
 
     if (existingRestaurant) {
       return res.status(400).json({
-        message: "A restaurant with the same name and address already exists.",
+        message: "restaurant_already_exists",
       });
     }
 
-    const username = await generateUsername(restaurant_name);
+    const username = await generateUsername(normalizedName);
 
-    const exists = await Restaurant.findOne({ email });
-    if (exists)
-      return res
-        .status(400)
-        .json({ message: "Email already exists for a restaurant" });
+    // 🔒 Check for existing email
+    const existingEmail = await Restaurant.findOne({
+      email: email.toLowerCase().trim(),
+    });
+    if (existingEmail) {
+      return res.status(400).json({ message: "email_already_exists" });
+    }
+
+    if (!Array.isArray(cuisine_type) || cuisine_type.length === 0) {
+      return res.status(400).json({ message: "cuisine_required" });
+    }
 
     // 🔐 Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 📦 Create restaurant
     const restaurant = await Restaurant.create({
-      restaurant_name,
+      restaurant_name: normalizedName,
       username,
       ownerName,
       companyName,
@@ -58,15 +78,16 @@ exports.createRestaurant = async (req, res, next) => {
       vat_number,
       fax,
       phoneNumber,
-      email,
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
       isHalal,
-      address,
+      address: normalizedAddress,
       cuisine_type,
       created_by: req.user._id,
     });
 
     res.status(201).json({
+      success: true,
       message: "Restaurant created successfully",
       restaurant,
     });

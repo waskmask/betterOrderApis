@@ -7,9 +7,29 @@ exports.getAllAdmins = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    const search = req.query.search?.trim() || "";
+    const order = req.query.order || "createdAt"; // default sort field
+    const dir = req.query.dir === "asc" ? 1 : -1; // ascending or descending
+
+    // ✅ Build MongoDB search filter
+    const filter = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { role: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+    // ✅ Fetch paginated and sorted data
     const [admins, total] = await Promise.all([
-      AdminUser.find().select("-password").skip(skip).limit(limit),
-      AdminUser.countDocuments(),
+      AdminUser.find(filter)
+        .sort({ [order]: dir })
+        .select("-password")
+        .skip(skip)
+        .limit(limit),
+      AdminUser.countDocuments(filter),
     ]);
 
     res.status(200).json({
@@ -27,6 +47,7 @@ exports.getAllAdmins = async (req, res) => {
   }
 };
 
+// ✅ update any admin user (only for superadmin and admin)
 exports.updateAdminUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -62,6 +83,7 @@ exports.updateAdminUser = async (req, res) => {
   }
 };
 
+// ✅ Get an admin user (only for superadmin and admin)
 exports.getSingleAdminUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -83,5 +105,29 @@ exports.getSingleAdminUser = async (req, res) => {
   } catch (error) {
     console.error("❌ Error fetching admin user:", error);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ✅ Get currently logged-in admin user's profile
+exports.getLoggedInAdminUser = async (req, res) => {
+  try {
+    // Optional: extra check if the role is restaurant, reject access
+    if (
+      !["admin", "superadmin", "sales", "moderator"].includes(req.user.role)
+    ) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const sanitizedUser = { ...req.user };
+    delete sanitizedUser.password;
+
+    res.status(200).json({
+      success: true,
+      message: "Logged-in admin profile fetched successfully",
+      user: sanitizedUser,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching logged-in admin user:", error.message);
+    res.status(500).json({ message: "Server error" });
   }
 };

@@ -3,13 +3,21 @@ const AdminUser = require("../modals/AdminUser");
 const { Restaurant } = require("../modals/Restaurant");
 
 exports.verifyToken = async (req, res, next) => {
+  // 📦 Get token from cookie OR Authorization header
   const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.token;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "No token provided" });
+  let token;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1]; // From Postman / API clients
+  } else if (cookieToken) {
+    token = cookieToken; // From frontend HttpOnly cookie
   }
 
-  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -109,6 +117,20 @@ exports.canManageMenuCategory = (req, res, next) => {
   return res.status(403).json({ message: "Access denied: Not authorized" });
 };
 
+//loggedIn admin
+exports.loggedInAdmin = (req, res, next) => {
+  const allowedRoles = ["superadmin", "admin", "sales", "moderator"];
+
+  if (!req.user || !allowedRoles.includes(req.user.role)) {
+    return res
+      .status(403)
+      .json({ message: "Access denied: Not an authorized admin user" });
+  }
+
+  next();
+};
+
+//loggedIn restaurant
 exports.isRestaurantSelf = (req, res, next) => {
   if (req.user.role !== "restaurant") {
     return res.status(403).json({ message: "Access denied" });

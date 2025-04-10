@@ -54,3 +54,5 @@ Thumbs.db
 *.swn
 *.bak
 *.tmp
+.text
+*.text

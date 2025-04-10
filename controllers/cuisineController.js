@@ -13,7 +13,9 @@ exports.createCuisine = async (req, res, next) => {
       name: name.trim().toLowerCase(),
       description,
     });
-    res.status(201).json({ message: "Cuisine created", cuisine });
+    res
+      .status(201)
+      .json({ message: "Cuisine created", cuisine, success: true });
   } catch (err) {
     next(err);
   }
@@ -22,14 +24,37 @@ exports.createCuisine = async (req, res, next) => {
 // Update Cuisine
 exports.updateCuisine = async (req, res, next) => {
   try {
+    const { name, description, isActive } = req.body;
+    const lowercaseName = name.trim().toLowerCase();
+
+    // 🛑 Check if another cuisine with the same name exists
+    const exists = await Cuisine.findOne({
+      name: lowercaseName,
+      _id: { $ne: req.params.id }, // Exclude current cuisine
+    });
+
+    if (exists) {
+      return res.status(400).json({ message: "Cuisine already exists" });
+    }
+
+    // ✅ Proceed to update
     const cuisine = await Cuisine.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      {
+        $set: {
+          name: lowercaseName,
+          description,
+          isActive: isActive === true || isActive === "true", // ✅ convert string to boolean if needed
+        },
+      },
       { new: true }
     );
+
     if (!cuisine) return res.status(404).json({ message: "Cuisine not found" });
 
-    res.status(200).json({ message: "Cuisine updated", cuisine });
+    res
+      .status(200)
+      .json({ message: "Cuisine updated", cuisine, success: true });
   } catch (err) {
     next(err);
   }
@@ -38,7 +63,7 @@ exports.updateCuisine = async (req, res, next) => {
 // List all Cuisines
 exports.getAllCuisines = async (req, res, next) => {
   try {
-    const cuisines = await Cuisine.find({ isActive: true }).sort({ name: 1 });
+    const cuisines = await Cuisine.find({}).sort({ name: 1 });
     res.status(200).json({ cuisines });
   } catch (err) {
     next(err);

@@ -2,6 +2,46 @@ const { Restaurant } = require("../modals/Restaurant");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+// restaurant login
+// exports.login = async (req, res, next) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     const restaurant = await Restaurant.findOne({ email });
+//     if (!restaurant || !restaurant.isActive) {
+//       return res
+//         .status(404)
+//         .json({ message: "Restaurant not found or inactive" });
+//     }
+
+//     const isMatch = await bcrypt.compare(password, restaurant.password);
+//     if (!isMatch) {
+//       return res.status(401).json({ message: "Incorrect password" });
+//     }
+
+//     // ✅ Generate token right here
+//     const token = jwt.sign(
+//       {
+//         id: restaurant._id,
+//         email: restaurant.email,
+//         role: "restaurant",
+//         tokenVersion: restaurant.tokenVersion,
+//       },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "7d" }
+//     );
+
+//     const { password: _, ...restaurantData } = restaurant.toObject();
+
+//     res.status(200).json({
+//       message: "Login successful",
+//       token,
+//       restaurant: restaurantData,
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -18,7 +58,6 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ message: "Incorrect password" });
     }
 
-    // ✅ Generate token right here
     const token = jwt.sign(
       {
         id: restaurant._id,
@@ -32,9 +71,17 @@ exports.login = async (req, res, next) => {
 
     const { password: _, ...restaurantData } = restaurant.toObject();
 
+    // ✅ Set token in HttpOnly cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.status(200).json({
       message: "Login successful",
-      token,
+      token, // for Postman
       restaurant: restaurantData,
     });
   } catch (error) {

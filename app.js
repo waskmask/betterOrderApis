@@ -1,9 +1,10 @@
 const express = require("express");
+const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const connectDB = require("./config/db");
 const passport = require("./utils/passport");
 const errorHandler = require("./middlewares/errorHandler");
-
+const cors = require("cors");
 const adminRoutes = require("./routes/adminAuthRoutes");
 const cuisineRoutes = require("./routes/cuisineRoutes");
 const restaurantRoutes = require("./routes/restaurantRoutes");
@@ -17,6 +18,23 @@ connectDB();
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
+
+const whitelist = ["http://localhost:5000"]; // frontend origin
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || whitelist.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // ✅ allows cookies
+  })
+);
+
 app.use(passport.initialize());
 
 app.use("/api/admin", adminRoutes);

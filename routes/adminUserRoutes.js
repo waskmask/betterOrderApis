@@ -2,7 +2,11 @@ const express = require("express");
 const router = express.Router();
 const asyncHandler = require("../utils/asyncHandler");
 const adminUserController = require("../controllers/adminUserController");
-const { verifyToken, isAdminOrSuperAdmin } = require("../middlewares/auth");
+const {
+  verifyToken,
+  isAdminOrSuperAdmin,
+  loggedInAdmin,
+} = require("../middlewares/auth");
 
 // ✅ Get all admin users (protected)
 router.get(
@@ -18,6 +22,14 @@ router.put(
   verifyToken,
   isAdminOrSuperAdmin,
   asyncHandler(adminUserController.updateAdminUser)
+);
+
+//loggedIn admin user
+router.get(
+  "/me",
+  verifyToken,
+  loggedInAdmin, // ✅ use here
+  asyncHandler(adminUserController.getLoggedInAdminUser)
 );
 
 // Get a single admin user
