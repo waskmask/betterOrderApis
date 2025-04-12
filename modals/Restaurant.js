@@ -146,6 +146,11 @@ const restaurantSchema = new mongoose.Schema(
   {
     restaurant_name: { type: String, required: true },
     username: { type: String, required: true, unique: true },
+    customer_id: {
+      type: String,
+      unique: true,
+      required: true,
+    },
     ownerName: String,
     companyName: String,
     taxId: String,
@@ -189,6 +194,11 @@ const restaurantSchema = new mongoose.Schema(
     opening_hours: openingHoursSchema,
     isActive: { type: Boolean, default: false },
     visibility: { type: Boolean, default: false },
+    payment_methods: {
+      type: [String],
+      enum: ["cod", "paypal", "online"],
+      default: ["cod"],
+    },
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     updated_by: [updatedBySchema],
     tokenVersion: { type: Number, default: 0 },
@@ -241,6 +251,23 @@ const generateUsername = async (name) => {
   return username;
 };
 
+const generateNextCustomerId = async () => {
+  const lastRestaurant = await Restaurant.findOne({
+    customer_id: { $regex: /^WF\d+$/ },
+  })
+    .sort({ customer_id: -1 })
+    .lean();
+
+  if (!lastRestaurant || !lastRestaurant.customer_id) {
+    return "WF10000";
+  }
+
+  const lastNumber = parseInt(lastRestaurant.customer_id.replace("WF", ""), 10);
+  const nextNumber = lastNumber + 1;
+
+  return `WF${nextNumber}`;
+};
+
 const restaurantLogSchema = new mongoose.Schema({
   restaurant: { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant" },
   log_type: {
@@ -260,5 +287,10 @@ const restaurantLogSchema = new mongoose.Schema({
 
 const RestaurantLog = mongoose.model("RestaurantLog", restaurantLogSchema);
 
-module.exports = { Restaurant, generateUsername, RestaurantLog };
+module.exports = {
+  Restaurant,
+  generateUsername,
+  generateNextCustomerId,
+  RestaurantLog,
+};
 // we need to add an option for restaurant to upload menu item image

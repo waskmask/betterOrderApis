@@ -5,6 +5,7 @@ const adminUserController = require("../controllers/adminUserController");
 const {
   verifyToken,
   isAdminOrSuperAdmin,
+  allAdminUsers,
   loggedInAdmin,
 } = require("../middlewares/auth");
 
@@ -36,7 +37,7 @@ router.get(
 router.get(
   "/:id",
   verifyToken,
-  isAdminOrSuperAdmin,
+  allAdminUsers,
   asyncHandler(adminUserController.getSingleAdminUser)
 );
 

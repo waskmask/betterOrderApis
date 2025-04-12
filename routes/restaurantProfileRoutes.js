@@ -1,7 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const asyncHandler = require("../utils/asyncHandler");
-const { verifyToken, canManageMenuCategory } = require("../middlewares/auth");
+const {
+  verifyToken,
+  allAdminUsers,
+  canManageMenuCategory,
+} = require("../middlewares/auth");
 const { uploadImage, processImage } = require("../middlewares/uploadImage");
 const restaurantProfileController = require("../controllers/restaurantProfileController");
 
@@ -44,7 +48,7 @@ router.post(
 router.get(
   "/:restaurantId/delivery-zones",
   verifyToken,
-  canManageMenuCategory,
+  allAdminUsers,
   asyncHandler(restaurantProfileController.getAllDeliveryZones)
 );
 

@@ -80,4 +80,12 @@ router.patch(
   asyncHandler(restaurantController.changeUsername)
 );
 
+// toggle visibility to show restaurant on app for customers to order food
+router.patch(
+  "/:restaurantId/toggle-visibility",
+  verifyToken,
+  isAdminOrSuperAdmin,
+  restaurantController.toggleRestaurantVisibility
+);
+
 module.exports = router;

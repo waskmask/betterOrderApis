@@ -88,36 +88,39 @@ exports.addDeliveryZone = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     if (restaurant.delivering_at.find((z) => z.postalCode === postalCode)) {
-      return res.status(400).json({ message: "Postal code already exists" });
+      return res.status(400).json({ message: "postal_code_already_exists" });
     }
 
     charges = parseFloat((charges || "0").toString().replace(",", "."));
     min_order_value = parseFloat(min_order_value.toString().replace(",", "."));
 
     if (isNaN(charges) || isNaN(min_order_value)) {
-      return res.status(400).json({ message: "Invalid price format" });
+      return res.status(400).json({ message: "invalid_price_format" });
     }
 
-    restaurant.delivering_at.push({
+    const isFree = free || charges === 0;
+    // ✅ Store the new zone in a variable first
+    const newZone = {
       postalCode,
       charges: free ? 0 : charges,
-      free: !!free,
+      free: isFree,
       delivery_time,
       min_order_value,
-    });
+    };
 
+    restaurant.delivering_at.push(newZone);
     await restaurant.save();
     res.status(201).json({
       success: true,
-      message: "Delivery zone added",
-      zones: restaurant.delivering_at,
+      message: "delivery_zone_added",
+      zone: newZone,
     });
   } catch (err) {
-    console.error("❌ Add zone error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("add_zone_error:", err);
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -144,40 +147,48 @@ exports.getAllDeliveryZones = async (req, res) => {
 };
 
 // update delivery zone
+// update delivery zone
 exports.updateDeliveryZone = async (req, res) => {
   try {
     const { restaurantId } = req.params;
-    const { index, postalCode, charges, free, delivery_time, min_order_value } =
+    let { index, postalCode, charges, free, delivery_time, min_order_value } =
       req.body;
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant || !restaurant.delivering_at[index])
-      return res.status(404).json({ message: "Zone not found" });
+      return res.status(404).json({ message: "zone_not_found" });
 
     const zone = restaurant.delivering_at[index];
 
     if (postalCode) zone.postalCode = postalCode;
     if (delivery_time) zone.delivery_time = delivery_time;
-    if (typeof free === "boolean") {
-      zone.free = free;
-      zone.charges = free
-        ? 0
-        : parseFloat((charges || "0").toString().replace(",", "."));
-    }
 
-    if (min_order_value !== undefined) {
-      zone.min_order_value = parseFloat(
-        min_order_value.toString().replace(",", ".")
-      );
-    }
+    // Normalize charges and min order value
+    charges = parseFloat((charges || "0").toString().replace(",", "."));
+    min_order_value = parseFloat(
+      (min_order_value || "0").toString().replace(",", ".")
+    );
+
+    // Determine if it's free
+    const isFree = !!free || charges === 0;
+
+    // Update free & charges accordingly
+    zone.free = isFree;
+    zone.charges = isFree ? 0 : charges;
+
+    // Always update min_order_value
+    zone.min_order_value = isNaN(min_order_value) ? 0 : min_order_value;
 
     await restaurant.save();
-    res
-      .status(200)
-      .json({ success: true, message: "Delivery zone updated", zone });
+
+    res.status(200).json({
+      success: true,
+      message: "delivery_zone_updated",
+      zone,
+    });
   } catch (err) {
-    console.error("❌ Update zone error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("update_zone_error", err);
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -188,7 +199,7 @@ exports.deleteDeliveryZone = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant || !restaurant.delivering_at[index]) {
-      return res.status(404).json({ message: "Zone not found" });
+      return res.status(404).json({ message: "zone_not_found" });
     }
 
     restaurant.delivering_at.splice(index, 1);
@@ -196,12 +207,12 @@ exports.deleteDeliveryZone = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Zone removed",
+      message: "zone_removed",
       zones: restaurant.delivering_at,
     });
   } catch (err) {
-    console.error("❌ Delete zone error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("delete_zone_error", err);
+    res.status(500).json({ message: "server_error" });
   }
 };
 

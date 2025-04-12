@@ -1,4 +1,8 @@
-const { Restaurant, generateUsername } = require("../modals/Restaurant");
+const {
+  Restaurant,
+  generateUsername,
+  generateNextCustomerId,
+} = require("../modals/Restaurant");
 const bcrypt = require("bcryptjs");
 
 exports.createRestaurant = async (req, res, next) => {
@@ -50,6 +54,7 @@ exports.createRestaurant = async (req, res, next) => {
     }
 
     const username = await generateUsername(normalizedName);
+    const customer_id = await generateNextCustomerId();
 
     // 🔒 Check for existing email
     const existingEmail = await Restaurant.findOne({
@@ -70,6 +75,7 @@ exports.createRestaurant = async (req, res, next) => {
     const restaurant = await Restaurant.create({
       restaurant_name: normalizedName,
       username,
+      customer_id,
       ownerName,
       companyName,
       taxId,
@@ -170,7 +176,7 @@ exports.toggleRestaurantStatus = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     restaurant.isActive = !restaurant.isActive;
 
@@ -184,9 +190,9 @@ exports.toggleRestaurantStatus = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Restaurant is now ${
-        restaurant.isActive ? "active" : "inactive"
-      }`,
+      message: restaurant.isActive
+        ? "restaurant_status_now_active"
+        : "restaurant_status_now_inactive",
       restaurant: {
         _id: restaurant._id,
         restaurant_name: restaurant.restaurant_name,
@@ -371,4 +377,118 @@ exports.changeUsername = async (req, res) => {
     message: "Username updated successfully",
     username: restaurant.username,
   });
+};
+
+// toggle visibility only if all conditions match
+exports.toggleRestaurantVisibility = async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant)
+      return res.status(404).json({ message: "restaurant_not_found" });
+
+    const failedConditions = [];
+
+    // ✅ Must be active
+    if (!restaurant.isActive) {
+      failedConditions.push("restaurant_must_be_active");
+    }
+
+    // ✅ At least one category
+    if (!restaurant.menu || restaurant.menu.length === 0) {
+      failedConditions.push("at_least_one_category_required");
+    }
+
+    // ✅ At least 2 menu items in any category
+    const hasTwoItems = restaurant.menu.some((cat) => cat.items.length >= 2);
+    if (!hasTwoItems) {
+      failedConditions.push("at_least_two_items_required");
+    }
+
+    // ✅ Check required fields and collect which ones are missing
+    const requiredFieldNames = [
+      "ownerName",
+      "companyName",
+      "taxId",
+      "registry",
+      "registry_number",
+      "phoneNumber",
+    ];
+
+    const missingFields = requiredFieldNames.filter((field) => {
+      const value = restaurant[field];
+      return !value || value.trim() === "";
+    });
+
+    if (missingFields.length > 0) {
+      failedConditions.push({
+        condition: "required_fields_missing",
+        fields: missingFields,
+      });
+    }
+
+    // ✅ Must have logo
+    if (!restaurant.images?.logo) {
+      failedConditions.push("restaurant_logo_required");
+    }
+
+    // ✅ Either delivery or take_away must be true
+    if (!restaurant.delivery && !restaurant.take_away) {
+      failedConditions.push("delivery_or_takeaway_required");
+    }
+
+    // ✅ At least one delivery zone
+    if (!restaurant.delivering_at || restaurant.delivering_at.length === 0) {
+      failedConditions.push("at_least_one_delivery_zone_required");
+    }
+
+    // ✅ All opening hours filled
+    const days = Object.keys(restaurant.opening_hours || {});
+    const allDaysFilled =
+      days.length === 7 &&
+      days.every((day) => {
+        const d = restaurant.opening_hours[day];
+        return d && (d.ifClosed || (d.opening && d.closing));
+      });
+
+    if (!allDaysFilled) {
+      failedConditions.push("incomplete_opening_hours");
+    }
+
+    // ❌ Return all failed conditions
+    if (failedConditions.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "visibility_toggle_conditions_failed",
+        failedConditions,
+      });
+    }
+
+    // ✅ Toggle visibility
+    restaurant.visibility = !restaurant.visibility;
+
+    restaurant.updated_by.push({
+      userType: req.user.role,
+      userId: req.user._id,
+      timestamp: new Date(),
+    });
+
+    await restaurant.save();
+
+    res.status(200).json({
+      success: true,
+      message: restaurant.visibility
+        ? "restaurant_visibility_now_visible"
+        : "restaurant_visibility_now_hidden",
+      restaurant: {
+        _id: restaurant._id,
+        restaurant_name: restaurant.restaurant_name,
+        visibility: restaurant.visibility,
+      },
+    });
+  } catch (err) {
+    console.error("Toggle visibility error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
