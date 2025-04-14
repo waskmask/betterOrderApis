@@ -5,6 +5,7 @@ const connectDB = require("./config/db");
 const passport = require("./utils/passport");
 const errorHandler = require("./middlewares/errorHandler");
 const cors = require("cors");
+const path = require("path");
 const adminRoutes = require("./routes/adminAuthRoutes");
 const cuisineRoutes = require("./routes/cuisineRoutes");
 const restaurantRoutes = require("./routes/restaurantRoutes");
@@ -34,7 +35,7 @@ app.use(
     credentials: true, // ✅ allows cookies
   })
 );
-
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use(passport.initialize());
 
 app.use("/api/admin", adminRoutes);

@@ -10,12 +10,12 @@ const handleImageUpload = async (req, res, type) => {
     if (!restaurantId) {
       return res
         .status(400)
-        .json({ message: "restaurantId is required in body" });
+        .json({ message: "restaurantId_is_required_in_body" });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     const currentImage = restaurant.images[type];
@@ -32,13 +32,13 @@ const handleImageUpload = async (req, res, type) => {
     res.status(200).json({
       success: true,
       message: `${
-        type === "logo" ? "Logo" : "Cover image"
+        type === "logo" ? "logo" : "cover_image"
       } uploaded successfully`,
       [type]: restaurant.images[type],
     });
   } catch (err) {
-    console.error(`❌ Upload ${type} error:`, err);
-    res.status(500).json({ message: "Server error", success: false });
+    console.error(`Upload ${type} error:`, err);
+    res.status(500).json({ message: "server_error", success: false });
   }
 };
 
@@ -147,7 +147,6 @@ exports.getAllDeliveryZones = async (req, res) => {
 };
 
 // update delivery zone
-// update delivery zone
 exports.updateDeliveryZone = async (req, res) => {
   try {
     const { restaurantId } = req.params;
@@ -226,12 +225,20 @@ const isTimeBetween = (open, close, check) => {
     const [h, m] = t.split(":").map(Number);
     return h * 60 + m;
   };
+
   const o = toMinutes(open);
   const c = toMinutes(close);
   const x = toMinutes(check);
 
-  // if next day: "18:00" → "02:00"
-  if (c <= o) return x >= o || x <= c;
+  // Special case: open 00:00 to close 00:00 means 24 hours open
+  if (o === 0 && c === 0) return true;
+
+  // Overnight range (e.g. 18:00–02:00)
+  if (c <= o) {
+    return x >= o || x <= c;
+  }
+
+  // Normal same-day range
   return x >= o && x <= c;
 };
 
@@ -243,7 +250,7 @@ exports.setOpeningHours = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     const days = [
       "monday",
@@ -277,38 +284,44 @@ exports.setOpeningHours = async (req, res) => {
       if (!opening || !closing) {
         return res
           .status(400)
-          .json({ message: `${day}: Opening and closing times required.` });
+          .json({ message: `${day}: opening_and_closing_times_required.` });
       }
 
       // Validate format
       if (!isValidTimeFormat(opening) || !isValidTimeFormat(closing)) {
         return res
           .status(400)
-          .json({ message: `${day}: Invalid opening or closing format.` });
+          .json({ message: `${day}: invalid_opening_or_closing_format` });
       }
 
       if (break_from && !isValidTimeFormat(break_from)) {
         return res
           .status(400)
-          .json({ message: `${day}: Invalid break_from format.` });
+          .json({ message: `${day}: invalid_break_from_format` });
       }
 
       if (break_to && !isValidTimeFormat(break_to)) {
         return res
           .status(400)
-          .json({ message: `${day}: Invalid break_to format.` });
+          .json({ message: `${day}: invalid_break_to_format` });
       }
 
       // ✅ Validate break range
-      if (break_from && break_to) {
+      const hasValidBreak =
+        break_from &&
+        break_to &&
+        break_from !== "00:00" &&
+        break_to !== "00:00";
+
+      if (hasValidBreak) {
         if (!isTimeBetween(opening, closing, break_from)) {
           return res.status(400).json({
-            message: `${day}: break_from must be between opening and closing.`,
+            message: `${day}: break_from_must_be_between`,
           });
         }
         if (!isTimeBetween(opening, closing, break_to)) {
           return res.status(400).json({
-            message: `${day}: break_to must be between opening and closing.`,
+            message: `${day}: break_to_must_be_between`,
           });
         }
       }
@@ -326,8 +339,8 @@ exports.setOpeningHours = async (req, res) => {
         opening,
         closing,
         nextDay,
-        break_from: break_from || "",
-        break_to: break_to || "",
+        break_from: hasValidBreak ? break_from : "",
+        break_to: hasValidBreak ? break_to : "",
       };
     }
 
@@ -336,12 +349,12 @@ exports.setOpeningHours = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Opening hours updated successfully",
+      message: "opening_hours_updated_successfully",
       opening_hours: restaurant.opening_hours,
     });
   } catch (err) {
-    console.error("❌ Set opening hours error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("set_opening_hours_error", err);
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -352,14 +365,14 @@ exports.getOpeningHours = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
 
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     res.status(200).json({
       success: true,
       opening_hours: restaurant.opening_hours,
     });
   } catch (err) {
-    console.error("❌ Get opening hours error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("get_opening_hours_error", err);
+    res.status(500).json({ message: "server_error" });
   }
 };
