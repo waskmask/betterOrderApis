@@ -2,46 +2,6 @@ const { Restaurant } = require("../modals/Restaurant");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// restaurant login
-// exports.login = async (req, res, next) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     const restaurant = await Restaurant.findOne({ email });
-//     if (!restaurant || !restaurant.isActive) {
-//       return res
-//         .status(404)
-//         .json({ message: "Restaurant not found or inactive" });
-//     }
-
-//     const isMatch = await bcrypt.compare(password, restaurant.password);
-//     if (!isMatch) {
-//       return res.status(401).json({ message: "Incorrect password" });
-//     }
-
-//     // ✅ Generate token right here
-//     const token = jwt.sign(
-//       {
-//         id: restaurant._id,
-//         email: restaurant.email,
-//         role: "restaurant",
-//         tokenVersion: restaurant.tokenVersion,
-//       },
-//       process.env.JWT_SECRET,
-//       { expiresIn: "7d" }
-//     );
-
-//     const { password: _, ...restaurantData } = restaurant.toObject();
-
-//     res.status(200).json({
-//       message: "Login successful",
-//       token,
-//       restaurant: restaurantData,
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -104,7 +64,7 @@ exports.changePassword = async (req, res, next) => {
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
       console.log("❌ Restaurant not found");
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     const isSuperAdmin = requester.role === "superadmin";
@@ -119,7 +79,7 @@ exports.changePassword = async (req, res, next) => {
       console.log("❌ Not authorized to change this password");
       return res
         .status(403)
-        .json({ message: "Not authorized to change password" });
+        .json({ message: "not_authorized_to_change_password" });
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);
@@ -142,9 +102,9 @@ exports.changePassword = async (req, res, next) => {
     await restaurant.save();
 
     console.log("✅ Password updated successfully");
-    return res.status(200).json({ message: "Password updated successfully" });
+    return res.status(200).json({ message: "password_updated_successfully" });
   } catch (err) {
-    console.error("❌ Error changing password:", err);
+    console.error("error_changing_password:", err);
     next(err);
   }
 };
@@ -155,7 +115,7 @@ exports.resetPassword = async (req, res, next) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     const hashed = await bcrypt.hash(newPassword, 10);
     restaurant.password = hashed;
@@ -174,7 +134,9 @@ exports.resetPassword = async (req, res, next) => {
 
     await restaurant.save();
 
-    res.status(200).json({ message: "Password reset by superadmin" });
+    res
+      .status(200)
+      .json({ success: true, message: "password_reset_by_superadmin" });
   } catch (err) {
     next(err);
   }

@@ -7,7 +7,7 @@ const { verifyToken, isSuperAdmin } = require("../middlewares/auth");
 // Login
 router.post("/login", asyncHandler(restaurantAuth.login));
 
-// Change password (self or superadmin)
+// Allow only self (restaurant) or superadmin
 router.post(
   "/change-password",
   verifyToken,

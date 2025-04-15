@@ -146,7 +146,7 @@ exports.getAllRestaurants = async (req, res) => {
     });
   } catch (err) {
     console.error("Get all restaurants error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -165,7 +165,7 @@ exports.getSingleRestaurant = async (req, res) => {
     res.status(200).json({ success: true, restaurant });
   } catch (err) {
     console.error("❌ Get single restaurant error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -180,6 +180,9 @@ exports.toggleRestaurantStatus = async (req, res) => {
 
     restaurant.isActive = !restaurant.isActive;
 
+    // Track who updated it
+    // Keep only the last 19 and push the new one
+    restaurant.updated_by = restaurant.updated_by.slice(-19);
     restaurant.updated_by.push({
       userType: req.user.role,
       userId: req.user._id,
@@ -201,7 +204,7 @@ exports.toggleRestaurantStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("Toggle status error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -224,7 +227,7 @@ exports.getRestaurantMenu = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Get restaurant menu error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -240,7 +243,7 @@ exports.getSelfRestaurant = async (req, res) => {
     res.status(200).json({ success: true, restaurant });
   } catch (err) {
     console.error("❌ Get self restaurant error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -252,19 +255,22 @@ exports.updateRestaurant = async (req, res, next) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
-    // Fields allowed to be updated
-    const updatableFields = [
-      "restaurant_name",
-      "ownerName",
-      "companyName",
+    const optionalFields = [
       "taxId",
       "registry",
       "registry_number",
       "vat_number",
       "fax",
+    ];
+
+    const updatableFields = [
+      "restaurant_name",
+      "ownerName",
+      "companyName",
+      "email",
       "phoneNumber",
       "isHalal",
       "address.street",
@@ -273,29 +279,42 @@ exports.updateRestaurant = async (req, res, next) => {
       "address.city",
       "address.country",
       "cuisine_type",
+      ...optionalFields,
     ];
 
     for (const field of updatableFields) {
       const fieldParts = field.split(".");
+      const isOptional = optionalFields.includes(fieldParts[0]);
       const value =
-        fieldParts.length === 1 ? updates[field] : updates[fieldParts[1]];
+        fieldParts.length === 1
+          ? updates[fieldParts[0]]
+          : updates[fieldParts[1]];
 
-      if (value !== undefined) {
-        if (typeof value === "string" && value.trim() === "") {
-          return res.status(400).json({ message: `${field} cannot be empty` });
-        }
+      if (
+        !isOptional &&
+        value !== undefined &&
+        typeof value === "string" &&
+        value.trim() === ""
+      ) {
+        return res
+          .status(400)
+          .json({ message: `${fieldParts[0]}_cannot_be_empty` });
+      }
 
-        const finalValue = typeof value === "string" ? value.trim() : value;
+      const finalValue = typeof value === "string" ? value.trim() : value;
 
-        if (fieldParts.length === 1) {
-          restaurant[fieldParts[0]] = finalValue;
-        } else {
-          restaurant.address[fieldParts[1]] = finalValue;
-        }
+      if (fieldParts.length === 1) {
+        restaurant[fieldParts[0]] =
+          finalValue || (isOptional ? "" : restaurant[fieldParts[0]]);
+      } else {
+        restaurant.address[fieldParts[1]] =
+          finalValue || (isOptional ? "" : restaurant.address[fieldParts[1]]);
       }
     }
 
-    // Log update
+    // Track who updated it
+    // Keep only the last 19 and push the new one
+    restaurant.updated_by = restaurant.updated_by.slice(-19);
     restaurant.updated_by.push({
       userType: req.user.role,
       userId: req.user._id,
@@ -305,12 +324,21 @@ exports.updateRestaurant = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: "Restaurant updated successfully",
+      message: "restaurant_updated_successfully",
       restaurant,
     });
   } catch (error) {
-    console.error("❌ Update restaurant error:", error);
-    res.status(500).json({ message: "Server error" });
+    if (error.code === 11000 && error.keyPattern?.email) {
+      console.warn(
+        "⚠️ Duplicate email on restaurant update:",
+        error.keyValue?.email
+      );
+      return res.status(400).json({
+        message: "another_restaurant_exist_with_this_email",
+      });
+    }
+    console.error("Update restaurant error:", error);
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -443,19 +471,35 @@ exports.toggleRestaurantVisibility = async (req, res) => {
       failedConditions.push("at_least_one_delivery_zone_required");
     }
 
-    // ✅ All opening hours filled
-    const days = Object.keys(restaurant.opening_hours || {});
-    const allDaysFilled =
-      days.length === 7 &&
-      days.every((day) => {
-        const d = restaurant.opening_hours[day];
-        return d && (d.ifClosed || (d.opening && d.closing));
-      });
+    const days = [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
+    ];
+
+    days.forEach((day) => {
+      const d = restaurant.opening_hours?.[day];
+      console.log(
+        `[Opening Hours Validation]`,
+        day,
+        JSON.stringify(d),
+        "Valid?",
+        d && (d.ifClosed || (d.opening && d.closing))
+      );
+    });
+
+    const allDaysFilled = days.every((day) => {
+      const d = restaurant.opening_hours?.[day];
+      return d && (d.ifClosed || (d.opening && d.closing));
+    });
 
     if (!allDaysFilled) {
       failedConditions.push("incomplete_opening_hours");
     }
-
     // ❌ Return all failed conditions
     if (failedConditions.length > 0) {
       return res.status(400).json({
@@ -468,6 +512,9 @@ exports.toggleRestaurantVisibility = async (req, res) => {
     // ✅ Toggle visibility
     restaurant.visibility = !restaurant.visibility;
 
+    // Track who updated it
+    // Keep only the last 19 and push the new one
+    restaurant.updated_by = restaurant.updated_by.slice(-19);
     restaurant.updated_by.push({
       userType: req.user.role,
       userId: req.user._id,
@@ -489,6 +536,6 @@ exports.toggleRestaurantVisibility = async (req, res) => {
     });
   } catch (err) {
     console.error("Toggle visibility error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
