@@ -2,19 +2,19 @@ const { Restaurant, RestaurantLog } = require("../modals/Restaurant");
 const path = require("path");
 const fs = require("fs");
 
-// ➕ Add Category (with image support)
+// Add Category (with image support)
 exports.addCategory = async (req, res) => {
   try {
     const { restaurantId } = req.params;
     let { category_name, category_desc, index } = req.body;
 
     if (!category_name || !category_name.trim()) {
-      return res.status(400).json({ message: "Category name is required" });
+      return res.status(400).json({ message: "category_name_is_required" });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     const duplicate = restaurant.menu.find(
@@ -24,7 +24,7 @@ exports.addCategory = async (req, res) => {
     );
 
     if (duplicate) {
-      return res.status(400).json({ message: "Category name already exists" });
+      return res.status(400).json({ message: "category_name_already_exists" });
     }
 
     const category = {
@@ -40,12 +40,12 @@ exports.addCategory = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Category added",
+      message: "category_added",
       category: restaurant.menu[restaurant.menu.length - 1],
     });
   } catch (error) {
     console.error("Add category error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -56,12 +56,12 @@ exports.sortCategories = async (req, res) => {
     const { sortedIds } = req.body; // Array of category _ids in new order
 
     if (!Array.isArray(sortedIds)) {
-      return res.status(400).json({ message: "sortedIds must be an array" });
+      return res.status(400).json({ message: "sortedIds_must_be_an_array" });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     restaurant.menu.forEach((cat) => {
@@ -74,12 +74,12 @@ exports.sortCategories = async (req, res) => {
     await restaurant.save();
     res.status(200).json({
       success: true,
-      message: "Categories sorted",
+      message: "categories_sorted",
       menu: restaurant.menu,
     });
   } catch (err) {
-    console.error("Sort error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("sort_error:", err);
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -91,11 +91,11 @@ exports.updateCategory = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     const category = restaurant.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     // ✅ Check duplicate name
     if (category_name) {
@@ -109,7 +109,7 @@ exports.updateCategory = async (req, res) => {
       if (duplicate) {
         return res
           .status(400)
-          .json({ message: "Category name already exists" });
+          .json({ message: "category_name_already_exists" });
       }
 
       category.category_name = category_name.trim();
@@ -145,12 +145,12 @@ exports.updateCategory = async (req, res) => {
     await restaurant.save();
     res.status(200).json({
       success: true,
-      message: "Category updated",
+      message: "category_updated",
       category,
     });
   } catch (error) {
-    console.error("Update category error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("update_category_error:", error);
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -161,12 +161,12 @@ exports.toggleCategoryActiveStatus = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     const category = restaurant.menu.id(categoryId);
     if (!category) {
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
     }
 
     category.isActive = !category.isActive;
@@ -174,12 +174,12 @@ exports.toggleCategoryActiveStatus = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Category is now ${category.isActive ? "active" : "inactive"}`,
+      message: `category_is_now ${category.isActive ? "active" : "inactive"}`,
       category,
     });
   } catch (err) {
     console.error("❌ Toggle category error:", err);
-    res.status(500).json({ message: "Server error", success: false });
+    res.status(500).json({ message: "server_error", success: false });
   }
 };
 
@@ -190,18 +190,18 @@ exports.deleteCategory = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     const category = restaurant.menu.id(categoryId);
     if (!category) {
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
     }
 
     // Prevent deletion if items exist
     if (category.items && category.items.length > 0) {
       return res.status(400).json({
-        message: "Cannot delete category with menu items.",
+        message: "cannot_delete_category_with_menu_items.",
       });
     }
 
@@ -237,11 +237,11 @@ exports.deleteCategory = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Category deleted",
+      message: "category_deleted",
     });
   } catch (error) {
     console.error("❌ Delete category error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "server_error" });
   }
 };
 
@@ -331,6 +331,7 @@ exports.addMenuItem = async (req, res) => {
       ...category.items.map((i) => i.price.length)
     );
     category.count_of_prices = maxPriceLength;
+    6;
     await restaurant.save();
 
     res.status(201).json({

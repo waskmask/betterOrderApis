@@ -73,6 +73,7 @@ const menuItemSchema = new mongoose.Schema({
   item_desc: String,
   index: { type: Number, default: 0 }, // 👈 for ordering
   price: [sizePriceSchema], // [{ item_size, item_price }]
+  highlight: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
 });
 
