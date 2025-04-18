@@ -15,6 +15,14 @@ router.post(
   asyncHandler(menuController.addCategory)
 );
 
+// GET single category from menu
+router.get(
+  "/:restaurantId/category/:categoryId",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(menuController.getSingleCategory)
+);
+
 // sort by index to reoder
 router.put(
   "/:restaurantId/category/sort",
@@ -24,7 +32,7 @@ router.put(
 );
 
 // Update Category
-router.put(
+router.patch(
   "/:restaurantId/category/:categoryId",
   verifyToken,
   canManageMenuCategory,

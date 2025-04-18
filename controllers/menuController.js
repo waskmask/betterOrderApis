@@ -49,11 +49,40 @@ exports.addCategory = async (req, res) => {
   }
 };
 
+// Get Single Category by restaurantId and categoryId
+exports.getSingleCategory = async (req, res) => {
+  try {
+    const { restaurantId, categoryId } = req.params;
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      return res.status(404).json({ message: "restaurant_not_found" });
+    }
+
+    const category = restaurant.menu.id(categoryId);
+    if (!category) {
+      return res.status(404).json({ message: "category_not_found" });
+    }
+
+    // Optional: remove nested objects if not needed (e.g., items, addons)
+    // const { items, dressings, addons, extra_menu, ...cleanCategory } =
+    //   category.toObject();
+
+    res.status(200).json({
+      success: true,
+      category,
+    });
+  } catch (error) {
+    console.error("❌ getSingleCategory error:", error);
+    res.status(500).json({ success: false, message: "server_error" });
+  }
+};
+
 //sort categories
 exports.sortCategories = async (req, res) => {
   try {
     const { restaurantId } = req.params;
-    const { sortedIds } = req.body; // Array of category _ids in new order
+    const { sortedIds } = req.body;
 
     if (!Array.isArray(sortedIds)) {
       return res.status(400).json({ message: "sortedIds_must_be_an_array" });
@@ -64,12 +93,11 @@ exports.sortCategories = async (req, res) => {
       return res.status(404).json({ message: "restaurant_not_found" });
     }
 
-    restaurant.menu.forEach((cat) => {
-      const newIndex = sortedIds.indexOf(cat._id.toString());
-      if (newIndex > -1) {
-        cat.index = newIndex;
-      }
-    });
+    // Reorder restaurant.menu based on sortedIds
+    const newMenu = sortedIds
+      .map((id) => restaurant.menu.find((cat) => cat._id.toString() === id))
+      .filter((cat) => cat); // Remove undefined entries
+    restaurant.menu = newMenu;
 
     await restaurant.save();
     res.status(200).json({
@@ -82,7 +110,6 @@ exports.sortCategories = async (req, res) => {
     res.status(500).json({ message: "server_error" });
   }
 };
-
 // ✏️ Update Category (with image replace)
 exports.updateCategory = async (req, res) => {
   try {
@@ -90,12 +117,14 @@ exports.updateCategory = async (req, res) => {
     const { category_name, category_desc, removeImage } = req.body;
 
     const restaurant = await Restaurant.findById(restaurantId);
-    if (!restaurant)
+    if (!restaurant) {
       return res.status(404).json({ message: "restaurant_not_found" });
+    }
 
     const category = restaurant.menu.id(categoryId);
-    if (!category)
+    if (!category) {
       return res.status(404).json({ message: "category_not_found" });
+    }
 
     // ✅ Check duplicate name
     if (category_name) {
@@ -115,10 +144,17 @@ exports.updateCategory = async (req, res) => {
       category.category_name = category_name.trim();
     }
 
-    if (category_desc) category.category_desc = category_desc;
+    // ✅ Update category_desc (handle empty strings)
+    if (category_desc !== undefined) {
+      category.category_desc = category_desc;
+    }
 
     // ✅ Handle image removal
-    if (removeImage === "true" && category.category_image) {
+    // Check for both string "true" and boolean true
+    if (
+      (removeImage === "true" || removeImage === true) &&
+      category.category_image
+    ) {
       const imagePath = path.join(__dirname, "..", category.category_image);
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath); // 🧹 delete old image
@@ -153,7 +189,6 @@ exports.updateCategory = async (req, res) => {
     res.status(500).json({ success: false, message: "server_error" });
   }
 };
-
 // toggel menu category active or inactive
 exports.toggleCategoryActiveStatus = async (req, res) => {
   try {
@@ -171,10 +206,14 @@ exports.toggleCategoryActiveStatus = async (req, res) => {
 
     category.isActive = !category.isActive;
     await restaurant.save();
+    // Return message without spaces
+    const message = category.isActive
+      ? "category_is_now_active"
+      : "category_is_now_inactive";
 
     res.status(200).json({
       success: true,
-      message: `category_is_now ${category.isActive ? "active" : "inactive"}`,
+      message,
       category,
     });
   } catch (err) {
@@ -183,7 +222,7 @@ exports.toggleCategoryActiveStatus = async (req, res) => {
   }
 };
 
-// ❌ Delete Category (also remove image)
+// Delete Category (also remove image)
 exports.deleteCategory = async (req, res) => {
   try {
     const { restaurantId, categoryId } = req.params;
