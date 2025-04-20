@@ -64,13 +64,62 @@ exports.getSingleCategory = async (req, res) => {
       return res.status(404).json({ message: "category_not_found" });
     }
 
-    // Optional: remove nested objects if not needed (e.g., items, addons)
-    // const { items, dressings, addons, extra_menu, ...cleanCategory } =
-    //   category.toObject();
+    // Convert Mongoose subdocument to plain JS object
+    const categoryObj = JSON.parse(JSON.stringify(category));
+
+    // 🔁 Normalize item prices
+    if (Array.isArray(categoryObj.items)) {
+      categoryObj.items = categoryObj.items.map((item) => {
+        if (Array.isArray(item.price)) {
+          item.price = item.price.map((p) => ({
+            ...p,
+            item_price:
+              typeof p.item_price === "string"
+                ? parseFloat(p.item_price.replace(",", "."))
+                : p.item_price,
+          }));
+        }
+        return item;
+      });
+    }
+
+    // 🔁 Normalize addon option prices
+    if (Array.isArray(categoryObj.addons)) {
+      categoryObj.addons = categoryObj.addons.map((addon) => {
+        if (Array.isArray(addon.options)) {
+          addon.options = addon.options.map((opt) => ({
+            ...opt,
+            addon_price:
+              typeof opt.addon_price === "string"
+                ? parseFloat(opt.addon_price.replace(",", "."))
+                : opt.addon_price,
+          }));
+        }
+        return addon;
+      });
+    }
+
+    // 🔁 Normalize extra menu prices
+    if (categoryObj.extra_menu?.extras) {
+      categoryObj.extra_menu.extras = categoryObj.extra_menu.extras.map(
+        (extra) => {
+          if (Array.isArray(extra.prices)) {
+            extra.prices = extra.prices.map((p) => ({
+              ...p,
+              price:
+                typeof p.price === "string"
+                  ? parseFloat(p.price.replace(",", "."))
+                  : p.price,
+            }));
+          }
+          return extra;
+        }
+      );
+    }
 
     res.status(200).json({
       success: true,
-      category,
+      category: categoryObj,
     });
   } catch (error) {
     console.error("❌ getSingleCategory error:", error);
@@ -110,7 +159,8 @@ exports.sortCategories = async (req, res) => {
     res.status(500).json({ message: "server_error" });
   }
 };
-// ✏️ Update Category (with image replace)
+
+// Update Category (with image replace)
 exports.updateCategory = async (req, res) => {
   try {
     const { restaurantId, categoryId } = req.params;
@@ -189,6 +239,7 @@ exports.updateCategory = async (req, res) => {
     res.status(500).json({ success: false, message: "server_error" });
   }
 };
+
 // toggel menu category active or inactive
 exports.toggleCategoryActiveStatus = async (req, res) => {
   try {
@@ -291,19 +342,17 @@ exports.addMenuItem = async (req, res) => {
     const { item_name, item_desc, price, isActive } = req.body;
 
     if (!item_name || !Array.isArray(price) || price.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Item name and price are required" });
+      return res.status(400).json({ message: "item_name_price_required" });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
     }
 
     const category = restaurant.menu.id(categoryId);
     if (!category) {
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
     }
 
     // ✅ Check for duplicate item name in this category
@@ -314,7 +363,7 @@ exports.addMenuItem = async (req, res) => {
     if (duplicateItem) {
       return res
         .status(400)
-        .json({ message: "Item name already exists in this category" });
+        .json({ message: "item_name_already_exists_category" });
     }
 
     // ✅ Convert price & check for duplicate sizes
@@ -325,7 +374,7 @@ exports.addMenuItem = async (req, res) => {
       if (!entry.item_size || !entry.item_price) {
         return res
           .status(400)
-          .json({ message: "Each price must include size and price" });
+          .json({ message: "each_price_must_include_size_and_price" });
       }
 
       const size = entry.item_size.trim();
@@ -346,7 +395,7 @@ exports.addMenuItem = async (req, res) => {
       if (isNaN(normalizedPrice)) {
         return res
           .status(400)
-          .json({ message: `Invalid price value: "${entry.item_price}"` });
+          .json({ message: `invalid_price_value: "${entry.item_price}"` });
       }
 
       normalizedPrices.push({
@@ -375,12 +424,12 @@ exports.addMenuItem = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Menu item added successfully",
+      message: "menu_item_added",
       item: newItem,
     });
   } catch (error) {
     console.error("❌ Add menu item error:", error);
-    res.status(500).json({ message: "Server error", success: false });
+    res.status(500).json({ message: "server_error", success: false });
   }
 };
 
@@ -420,7 +469,6 @@ exports.sortMenuItems = async (req, res) => {
 };
 
 // update menu item
-
 exports.updateMenuItem = async (req, res) => {
   try {
     const { restaurantId, categoryId, itemId } = req.params;
@@ -428,14 +476,14 @@ exports.updateMenuItem = async (req, res) => {
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
-      return res.status(404).json({ message: "Restaurant not found" });
+      return res.status(404).json({ message: "restaurant_not_found" });
 
     const category = restaurant.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const item = category.items.id(itemId);
-    if (!item) return res.status(404).json({ message: "Menu item not found" });
+    if (!item) return res.status(404).json({ message: "menu_item_not_found" });
 
     // ✅ Check for duplicate item name (if updating)
     if (
@@ -463,7 +511,7 @@ exports.updateMenuItem = async (req, res) => {
       if (!Array.isArray(price) || price.length === 0) {
         return res
           .status(400)
-          .json({ message: "Price must be a non-empty array" });
+          .json({ message: "price_must_be_a_non_empty_array" });
       }
 
       const normalizedPrices = [];
@@ -473,7 +521,7 @@ exports.updateMenuItem = async (req, res) => {
         if (!entry.item_size || !entry.item_price) {
           return res
             .status(400)
-            .json({ message: "Each price must include size and price" });
+            .json({ message: "each_price_must_include_size_and_price" });
         }
 
         const size = entry.item_size.trim();
@@ -501,18 +549,24 @@ exports.updateMenuItem = async (req, res) => {
       }
 
       item.price = normalizedPrices;
+
+      // ✅ Update count_of_prices dynamically
+      const maxPriceLength = Math.max(
+        ...category.items.map((i) => i.price.length)
+      );
+      category.count_of_prices = maxPriceLength;
     }
 
     await restaurant.save();
 
     res.status(200).json({
       success: true,
-      message: "Menu item updated successfully",
+      message: "menu_item_updated",
       item,
     });
   } catch (error) {
     console.error("❌ Update menu item error:", error);
-    res.status(500).json({ message: "Server error", success: false });
+    res.status(500).json({ message: "server_error", success: false });
   }
 };
 
