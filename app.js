@@ -15,7 +15,6 @@ const restaurantMenuRoutes = require("./routes/restaurantMenuRoutes");
 const restaurantProfileRoutes = require("./routes/restaurantProfileRoutes");
 
 dotenv.config();
-connectDB();
 
 const app = express();
 app.use(express.json());
@@ -37,6 +36,24 @@ app.use(
 );
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use(passport.initialize());
+
+app.get("/ping", (req, res) => {
+  return res.json({ success: true, dbConnected: global.dbConnected || false });
+});
+
+// Block all routes if DB is offline
+app.use((req, res, next) => {
+  if (req.path === "/ping") return next(); // allow /ping even if offline
+  if (global.dbConnected === false) {
+    return res
+      .status(503)
+      .json({
+        success: false,
+        message: "You are offline. Please try again later.",
+      });
+  }
+  next();
+});
 
 app.use("/api/admin", adminRoutes);
 app.use("/api/cuisine", cuisineRoutes);
@@ -62,6 +79,19 @@ process.on("uncaughtException", (err) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    console.log("✅ MongoDB connected");
+  } catch (err) {
+    console.error("❌ MongoDB error:", err.message);
+    console.warn("⚠️ Starting server without DB connection (offline mode)");
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+};
+
+startServer();

@@ -588,10 +588,13 @@ exports.toggleItemActiveStatus = async (req, res) => {
 
     item.isActive = !item.isActive;
     await restaurant.save();
-
+    // Return message without spaces
+    const message = item.isActive
+      ? "item_is_now_active"
+      : "item_is_now_inactive";
     res.status(200).json({
       success: true,
-      message: `Item is now ${item.isActive ? "active" : "inactive"}`,
+      message,
       item,
     });
   } catch (err) {
@@ -607,23 +610,23 @@ exports.addExtraMenu = async (req, res) => {
     const { label, prices } = req.body;
 
     if (!label || !Array.isArray(prices)) {
-      return res.status(400).json({ message: "Label and prices are required" });
+      return res
+        .status(400)
+        .json({ message: "label_and_atleast-1_price_required" });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
 
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     // ✅ Check for duplicate label (case-insensitive)
     const isDuplicate = category.extra_menu.extras.some(
       (extra) => extra.label.trim().toLowerCase() === label.trim().toLowerCase()
     );
     if (isDuplicate) {
-      return res
-        .status(400)
-        .json({ message: "Extra with this name already exists" });
+      return res.status(400).json({ message: "extra_with_this_name_exist" });
     }
 
     // ✅ Normalize each price object (comma/dot fix)
@@ -656,12 +659,12 @@ exports.addExtraMenu = async (req, res) => {
     await restaurant.save();
     res.status(201).json({
       success: true,
-      message: "Extra added",
+      message: "extra_added",
       extras: category.extra_menu.extras,
     });
   } catch (err) {
     console.error("❌ Add extra error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -696,12 +699,12 @@ exports.updateExtraMenu = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category) {
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
     }
 
     const extra = category.extra_menu.extras.id(extraId);
     if (!extra) {
-      return res.status(404).json({ message: "Extra not found" });
+      return res.status(404).json({ message: "extra_not_found" });
     }
 
     // ✅ Check for duplicate label (excluding current)
@@ -713,37 +716,38 @@ exports.updateExtraMenu = async (req, res) => {
           e.label.toLowerCase() === label.toLowerCase()
       )
     ) {
-      return res
-        .status(400)
-        .json({ message: "Another extra with this name already exists" });
+      return res.status(400).json({ message: "extra_with_this_name_exist" });
     }
 
+    // Update label if provided
     if (label) extra.label = label.trim();
-    // ✅ Normalize each price object (comma/dot fix)
-    const normalizedPrices = prices.map((p) => {
-      const rawPrice = p?.price;
 
-      const parsed =
-        typeof rawPrice === "string"
-          ? parseFloat(rawPrice.replace(",", "."))
-          : rawPrice;
+    // ✅ Normalize and update prices if provided
+    if (prices && Array.isArray(prices)) {
+      const normalizedPrices = prices.map((p) => {
+        const rawPrice = p?.price;
+        const parsed =
+          typeof rawPrice === "string"
+            ? parseFloat(rawPrice.replace(",", "."))
+            : rawPrice;
+        if (isNaN(parsed)) {
+          throw new Error(`Invalid price value: "${rawPrice}"`);
+        }
+        return { price: parsed };
+      });
+      extra.prices = normalizedPrices; // Explicitly update the prices field
+    }
 
-      if (isNaN(parsed)) {
-        throw new Error(`Invalid price value: "${rawPrice}"`);
-      }
-
-      return { price: parsed };
-    });
-
+    // Update isActive if provided
     if (typeof isActive === "boolean") {
       extra.isActive = isActive;
     }
 
     await restaurant.save();
-    res.status(200).json({ success: true, message: "Extra updated", extra });
+    res.status(200).json({ success: true, message: "extra_updated", extra });
   } catch (err) {
     console.error("❌ Update extra error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -756,22 +760,27 @@ exports.toggleExtraActiveStatus = async (req, res) => {
     const category = restaurant?.menu.id(categoryId);
 
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const extra = category.extra_menu.extras[extraIndex];
-    if (!extra) return res.status(404).json({ message: "Extra not found" });
+    if (!extra) return res.status(404).json({ message: "extra_not_found" });
 
     extra.isActive = !extra.isActive;
     await restaurant.save();
 
+    // Return message without spaces
+    const message = extra.isActive
+      ? "extra_is_now_active"
+      : "extra_is_now_inactive";
+
     res.status(200).json({
       success: true,
-      message: `Extra is now ${extra.isActive ? "active" : "inactive"}`,
+      message,
       extra,
     });
   } catch (err) {
     console.error("❌ Toggle extra error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -813,28 +822,27 @@ exports.addDressing = async (req, res) => {
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
-    // Check duplicate
-    const exists = category.dressings.some(
-      (d) =>
-        d.dressing_label.trim().toLowerCase() ===
-        dressing_label.trim().toLowerCase()
-    );
-    if (exists)
-      return res.status(400).json({ message: "Dressing already exists" });
+    const exists =
+      category.dressing?.dressing_label?.trim().toLowerCase() ===
+      dressing_label.trim().toLowerCase();
 
-    category.dressings.push({
+    if (exists) {
+      return res.status(400).json({ message: "Dressing already exists" });
+    }
+
+    category.dressing = {
       dressing_label: dressing_label.trim(),
       multiple: !!multiple,
       options: options.map((opt) => ({
         dressing_name: opt.dressing_name?.trim(),
       })),
-    });
+    };
 
     await restaurant.save();
     res.status(201).json({
       success: true,
       message: "Dressing added",
-      dressings: category.dressings,
+      dressing: category.dressing,
     });
   } catch (err) {
     console.error("❌ Add dressing error:", err);
@@ -854,7 +862,7 @@ exports.getAllDressings = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      dressings: category.dressings,
+      dressing: category.dressing,
     });
   } catch (err) {
     console.error("❌ Get dressings error:", err);
@@ -862,49 +870,21 @@ exports.getAllDressings = async (req, res) => {
   }
 };
 
-// delete dressing
-exports.deleteDressing = async (req, res) => {
-  try {
-    const { restaurantId, categoryId, index } = req.params;
-
-    const restaurant = await Restaurant.findById(restaurantId);
-    const category = restaurant?.menu.id(categoryId);
-    if (!category) {
-      return res.status(404).json({ message: "Category not found" });
-    }
-
-    if (!category.dressings || !category.dressings[index]) {
-      return res.status(404).json({ message: "Dressing not found" });
-    }
-
-    // Remove dressing by index
-    category.dressings.splice(index, 1);
-    await restaurant.save();
-
-    res
-      .status(200)
-      .json({ success: true, message: "Dressing deleted successfully" });
-  } catch (err) {
-    console.error("❌ Delete dressing error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
 // toggle dressing option
 exports.toggleDressingOption = async (req, res) => {
   try {
-    const { restaurantId, categoryId, dressingIndex, optionIndex } = req.params;
+    const { restaurantId, categoryId, optionIndex } = req.params;
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
-    const dressing = category.dressings[dressingIndex];
+    const dressing = category.dressing;
     if (!dressing)
       return res.status(404).json({ message: "Dressing not found" });
 
-    const option = dressing.options[optionIndex];
+    const option = dressing?.options?.[optionIndex];
     if (!option) return res.status(404).json({ message: "Option not found" });
 
     option.isActive = !option.isActive;
@@ -927,15 +907,15 @@ exports.toggleDressingOption = async (req, res) => {
 // delete dressing option
 exports.deleteDressingOption = async (req, res) => {
   try {
-    const { restaurantId, categoryId, dressingIndex, optionIndex } = req.params;
+    const { restaurantId, categoryId, optionIndex } = req.params;
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
-    const dressing = category.dressings[dressingIndex];
-    if (!dressing || !dressing.options[optionIndex]) {
+    const dressing = category.dressing;
+    if (!dressing || !dressing.options?.[optionIndex]) {
       return res.status(404).json({ message: "Dressing option not found" });
     }
 
@@ -955,7 +935,7 @@ exports.deleteDressingOption = async (req, res) => {
 // update dressing
 exports.updateDressing = async (req, res) => {
   try {
-    const { restaurantId, categoryId, index } = req.params;
+    const { restaurantId, categoryId } = req.params;
     const { dressing_label, multiple, options } = req.body;
 
     const restaurant = await Restaurant.findById(restaurantId);
@@ -963,7 +943,7 @@ exports.updateDressing = async (req, res) => {
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
-    const dressing = category.dressings[index];
+    const dressing = category.dressing;
     if (!dressing)
       return res.status(404).json({ message: "Dressing not found" });
 
@@ -988,14 +968,14 @@ exports.updateDressing = async (req, res) => {
 // toggle dressing status
 exports.toggleDressing = async (req, res) => {
   try {
-    const { restaurantId, categoryId, index } = req.params;
+    const { restaurantId, categoryId } = req.params;
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
-    const dressing = category.dressings[index];
+    const dressing = category.dressing;
     if (!dressing)
       return res.status(404).json({ message: "Dressing not found" });
 

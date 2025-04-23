@@ -128,49 +128,41 @@ router.patch(
   asyncHandler(menuController.toggleExtraActiveStatus)
 );
 
-// add dressings
+// Add dressing
 router.post(
-  "/:restaurantId/categories/:categoryId/dressings",
+  "/:restaurantId/categories/:categoryId/dressing",
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.addDressing)
 );
 
-// get all dressings
+// Get dressing
 router.get(
-  "/:restaurantId/categories/:categoryId/dressings",
+  "/:restaurantId/categories/:categoryId/dressing",
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.getAllDressings)
 );
 
-// update dressings
+// Update dressing
 router.patch(
-  "/:restaurantId/categories/:categoryId/dressings/:index",
+  "/:restaurantId/categories/:categoryId/dressing",
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.updateDressing)
 );
 
-// toggle dressing status
+// Toggle dressing status
 router.patch(
-  "/:restaurantId/categories/:categoryId/dressings/:index/toggle",
+  "/:restaurantId/categories/:categoryId/dressing/toggle",
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.toggleDressing)
 );
 
-// delete dressing
-router.delete(
-  "/:restaurantId/categories/:categoryId/dressings/:index",
-  verifyToken,
-  canManageMenuCategory,
-  asyncHandler(menuController.deleteDressing)
-);
-
 // Toggle dressing option status
 router.patch(
-  "/:restaurantId/categories/:categoryId/dressings/:dressingIndex/options/:optionIndex/toggle",
+  "/:restaurantId/categories/:categoryId/dressing/options/:optionIndex/toggle",
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.toggleDressingOption)
@@ -178,7 +170,7 @@ router.patch(
 
 // Delete dressing option
 router.delete(
-  "/:restaurantId/categories/:categoryId/dressings/:dressingIndex/options/:optionIndex",
+  "/:restaurantId/categories/:categoryId/dressing/options/:optionIndex",
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.deleteDressingOption)

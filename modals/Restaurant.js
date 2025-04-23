@@ -109,7 +109,7 @@ const categorySchema = new mongoose.Schema({
   },
   category_image: { type: String },
   addons: [addonSchema], // Paid options for all items in the category
-  dressings: [dressingSchema], // Optional dressings for the category
+  dressing: dressingSchema,
   items: [menuItemSchema],
   isActive: { type: Boolean, default: true },
 });
