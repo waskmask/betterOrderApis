@@ -46,6 +46,11 @@ const addonSchema = new mongoose.Schema({
   optional: { type: Boolean, default: true },
   multiple: { type: Boolean, default: false },
   options: [optionItemSchema],
+  appliesTo: {
+    type: [mongoose.Schema.Types.ObjectId], // menu item _ids
+    default: [], // empty = not attached to any
+  },
+  applyToAll: { type: Boolean, default: true }, // true = entire category
   isActive: { type: Boolean, default: true },
 });
 

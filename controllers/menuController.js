@@ -805,50 +805,106 @@ exports.deleteExtraMenu = async (req, res) => {
   }
 };
 
-//add dressings
-exports.addDressing = async (req, res) => {
+// add / update dressing
+exports.upsertDressing = async (req, res) => {
   try {
     const { restaurantId, categoryId } = req.params;
     const { dressing_label, multiple, options } = req.body;
 
+    // Basic validation
     if (!dressing_label || !Array.isArray(options) || options.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Dressing label and options are required" });
+      return res.status(400).json({
+        message: "dressing_label_and_at_least_one_option",
+      });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
-    const exists =
-      category.dressing?.dressing_label?.trim().toLowerCase() ===
-      dressing_label.trim().toLowerCase();
-
-    if (exists) {
-      return res.status(400).json({ message: "Dressing already exists" });
-    }
-
-    category.dressing = {
+    const newDressing = {
       dressing_label: dressing_label.trim(),
       multiple: !!multiple,
+      isActive: true,
       options: options.map((opt) => ({
         dressing_name: opt.dressing_name?.trim(),
+        isActive: true,
       })),
     };
 
-    await restaurant.save();
-    res.status(201).json({
-      success: true,
-      message: "Dressing added",
-      dressing: category.dressing,
-    });
+    if (!category.dressing) {
+      // Create new dressing
+      category.dressing = newDressing;
+      await restaurant.save();
+      return res.status(201).json({
+        success: true,
+        message: "dressing_created",
+        dressing: category.dressing,
+      });
+    } else {
+      // Update existing dressing
+      category.dressing.dressing_label = newDressing.dressing_label;
+      category.dressing.multiple = newDressing.multiple;
+      category.dressing.options = newDressing.options;
+
+      await restaurant.save();
+      return res.status(200).json({
+        success: true,
+        message: "dressing_updated",
+        dressing: category.dressing,
+      });
+    }
   } catch (err) {
-    console.error("❌ Add dressing error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Upsert dressing error:", err);
+    res.status(500).json({ message: "server_error" });
   }
 };
+
+// //add dressings
+// exports.addDressing = async (req, res) => {
+//   try {
+//     const { restaurantId, categoryId } = req.params;
+//     const { dressing_label, multiple, options } = req.body;
+
+//     if (!dressing_label || !Array.isArray(options) || options.length === 0) {
+//       return res
+//         .status(400)
+//         .json({ message: "Dressing label and options are required" });
+//     }
+
+//     const restaurant = await Restaurant.findById(restaurantId);
+//     const category = restaurant?.menu.id(categoryId);
+//     if (!category)
+//       return res.status(404).json({ message: "Category not found" });
+
+//     const exists =
+//       category.dressing?.dressing_label?.trim().toLowerCase() ===
+//       dressing_label.trim().toLowerCase();
+
+//     if (exists) {
+//       return res.status(400).json({ message: "Dressing already exists" });
+//     }
+
+//     category.dressing = {
+//       dressing_label: dressing_label.trim(),
+//       multiple: !!multiple,
+//       options: options.map((opt) => ({
+//         dressing_name: opt.dressing_name?.trim(),
+//       })),
+//     };
+
+//     await restaurant.save();
+//     res.status(201).json({
+//       success: true,
+//       message: "Dressing added",
+//       dressing: category.dressing,
+//     });
+//   } catch (err) {
+//     console.error("❌ Add dressing error:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 
 // get all dressings
 exports.getAllDressings = async (req, res) => {
@@ -858,7 +914,7 @@ exports.getAllDressings = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     res.status(200).json({
       success: true,
@@ -866,7 +922,7 @@ exports.getAllDressings = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Get dressings error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -878,29 +934,32 @@ exports.toggleDressingOption = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const dressing = category.dressing;
     if (!dressing)
-      return res.status(404).json({ message: "Dressing not found" });
+      return res.status(404).json({ message: "dressing_not_found" });
 
     const option = dressing?.options?.[optionIndex];
-    if (!option) return res.status(404).json({ message: "Option not found" });
+    if (!option) return res.status(404).json({ message: "option_not_found" });
 
     option.isActive = !option.isActive;
 
     await restaurant.save();
 
+    // Return message without spaces
+    const message = option.isActive
+      ? "option_is_now_active"
+      : "option_is_now_inactive";
+
     res.status(200).json({
       success: true,
-      message: `Dressing option is now ${
-        option.isActive ? "active" : "inactive"
-      }`,
+      message,
       option,
     });
   } catch (err) {
     console.error("❌ Toggle dressing option error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -912,11 +971,11 @@ exports.deleteDressingOption = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const dressing = category.dressing;
     if (!dressing || !dressing.options?.[optionIndex]) {
-      return res.status(404).json({ message: "Dressing option not found" });
+      return res.status(404).json({ message: "dressing_option_not_found" });
     }
 
     dressing.options.splice(optionIndex, 1);
@@ -924,46 +983,46 @@ exports.deleteDressingOption = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Dressing option deleted successfully",
+      message: "dressing_option_deleted",
     });
   } catch (err) {
     console.error("❌ Delete dressing option error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
-// update dressing
-exports.updateDressing = async (req, res) => {
-  try {
-    const { restaurantId, categoryId } = req.params;
-    const { dressing_label, multiple, options } = req.body;
+// // update dressing
+// exports.updateDressing = async (req, res) => {
+//   try {
+//     const { restaurantId, categoryId } = req.params;
+//     const { dressing_label, multiple, options } = req.body;
 
-    const restaurant = await Restaurant.findById(restaurantId);
-    const category = restaurant?.menu.id(categoryId);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
+//     const restaurant = await Restaurant.findById(restaurantId);
+//     const category = restaurant?.menu.id(categoryId);
+//     if (!category)
+//       return res.status(404).json({ message: "Category not found" });
 
-    const dressing = category.dressing;
-    if (!dressing)
-      return res.status(404).json({ message: "Dressing not found" });
+//     const dressing = category.dressing;
+//     if (!dressing)
+//       return res.status(404).json({ message: "Dressing not found" });
 
-    if (dressing_label) dressing.dressing_label = dressing_label.trim();
-    if (typeof multiple === "boolean") dressing.multiple = multiple;
-    if (Array.isArray(options)) {
-      dressing.options = options.map((opt) => ({
-        dressing_name: opt.dressing_name?.trim(),
-      }));
-    }
+//     if (dressing_label) dressing.dressing_label = dressing_label.trim();
+//     if (typeof multiple === "boolean") dressing.multiple = multiple;
+//     if (Array.isArray(options)) {
+//       dressing.options = options.map((opt) => ({
+//         dressing_name: opt.dressing_name?.trim(),
+//       }));
+//     }
 
-    await restaurant.save();
-    res
-      .status(200)
-      .json({ success: true, message: "Dressing updated", dressing });
-  } catch (err) {
-    console.error("❌ Update dressing error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+//     await restaurant.save();
+//     res
+//       .status(200)
+//       .json({ success: true, message: "Dressing updated", dressing });
+//   } catch (err) {
+//     console.error("❌ Update dressing error:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 
 // toggle dressing status
 exports.toggleDressing = async (req, res) => {
@@ -993,7 +1052,8 @@ exports.toggleDressing = async (req, res) => {
   }
 };
 
-// add addons, send addon_price only if addon is not free
+// add addons, send addon_price only if addon is not
+// free as well as item specific if not for all
 exports.addAddon = async (req, res) => {
   try {
     const { restaurantId, categoryId } = req.params;
@@ -1002,18 +1062,20 @@ exports.addAddon = async (req, res) => {
       optional = true,
       multiple = false,
       options,
+      applyToAll = true,
+      appliesTo = [],
     } = req.body;
 
     if (!addon_label || !Array.isArray(options) || options.length === 0) {
       return res
         .status(400)
-        .json({ message: "Addon label and options are required" });
+        .json({ message: "addon_label_and_option_required" });
     }
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     // Check for duplicate addon_label
     const exists = category.addons.some(
@@ -1021,8 +1083,31 @@ exports.addAddon = async (req, res) => {
         a.addon_label.trim().toLowerCase() === addon_label.trim().toLowerCase()
     );
     if (exists)
-      return res.status(400).json({ message: "Addon label already exists" });
+      return res.status(400).json({ message: "addon_label_already_exists" });
 
+    // ✅ Validate item IDs if applyToAll is false
+    let validatedAppliesTo = [];
+    if (!applyToAll) {
+      const validItemIds = new Set(
+        category.items.map((item) => item._id.toString())
+      );
+      for (let id of appliesTo) {
+        if (!validItemIds.has(id)) {
+          return res
+            .status(400)
+            .json({ message: `Invalid menu item ID: ${id}` });
+        }
+        validatedAppliesTo.push(id); // keep only valid ones
+      }
+
+      if (validatedAppliesTo.length === 0) {
+        return res
+          .status(400)
+          .json({ message: "no_valid_menu_item_ids_provided" });
+      }
+    }
+
+    // ✅ Normalize addon options
     const normalizedOptions = [];
     const seenNames = new Set();
 
@@ -1030,7 +1115,7 @@ exports.addAddon = async (req, res) => {
       if (!opt.addon_name || !opt.addon_name.trim()) {
         return res
           .status(400)
-          .json({ message: "Each option must have a name" });
+          .json({ message: "each_option_must_have_a_name" });
       }
 
       const nameKey = opt.addon_name.trim().toLowerCase();
@@ -1067,16 +1152,20 @@ exports.addAddon = async (req, res) => {
       optional,
       multiple,
       options: normalizedOptions,
+      applyToAll: !!applyToAll,
+      appliesTo: applyToAll ? [] : validatedAppliesTo,
     });
 
     await restaurant.save();
-
-    res
-      .status(201)
-      .json({ success: true, message: "Addon added", addons: category.addons });
+    const newAddon = category.addons[category.addons.length - 1];
+    res.status(201).json({
+      success: true,
+      message: "addon_added",
+      addon: newAddon,
+    });
   } catch (err) {
     console.error("❌ Add addon error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -1100,24 +1189,62 @@ exports.getAllAddons = async (req, res) => {
   }
 };
 
-// update addons
 exports.updateAddon = async (req, res) => {
   try {
     const { restaurantId, categoryId, index } = req.params;
-    const { addon_label, optional, multiple, options } = req.body;
+    const {
+      addon_label,
+      optional,
+      multiple,
+      options,
+      applyToAll = true,
+      appliesTo = [],
+    } = req.body;
 
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const addon = category.addons[index];
-    if (!addon) return res.status(404).json({ message: "Addon not found" });
+    if (!addon) return res.status(404).json({ message: "addon_not_found" });
 
     if (addon_label) addon.addon_label = addon_label.trim();
     if (typeof optional === "boolean") addon.optional = optional;
     if (typeof multiple === "boolean") addon.multiple = multiple;
 
+    // ✅ Validate applyToAll and appliesTo
+    if (typeof applyToAll === "boolean") {
+      addon.applyToAll = applyToAll;
+
+      if (!applyToAll) {
+        const validItemIds = new Set(
+          category.items.map((i) => i._id.toString())
+        );
+        const validatedAppliesTo = [];
+
+        for (let id of appliesTo) {
+          if (!validItemIds.has(id)) {
+            return res
+              .status(400)
+              .json({ message: `Invalid menu item ID: ${id}` });
+          }
+          validatedAppliesTo.push(id);
+        }
+
+        if (validatedAppliesTo.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "no_valid_menu_item_ids_provided" });
+        }
+
+        addon.appliesTo = validatedAppliesTo;
+      } else {
+        addon.appliesTo = []; // Clear appliesTo if applyToAll is true
+      }
+    }
+
+    // ✅ Normalize options
     if (Array.isArray(options)) {
       const normalizedOptions = [];
       const seenNames = new Set();
@@ -1162,10 +1289,14 @@ exports.updateAddon = async (req, res) => {
     }
 
     await restaurant.save();
-    res.status(200).json({ success: true, message: "Addon updated", addon });
+    res.status(200).json({
+      success: true,
+      message: "Addon updated",
+      addon,
+    });
   } catch (err) {
     console.error("❌ Update addon error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 

@@ -128,12 +128,20 @@ router.patch(
   asyncHandler(menuController.toggleExtraActiveStatus)
 );
 
-// Add dressing
-router.post(
+// deprecated Add dressing
+// router.post(
+//   "/:restaurantId/categories/:categoryId/dressing",
+//   verifyToken,
+//   canManageMenuCategory,
+//   asyncHandler(menuController.addDressing)
+// );
+
+// Add / Update dressing
+router.patch(
   "/:restaurantId/categories/:categoryId/dressing",
   verifyToken,
   canManageMenuCategory,
-  asyncHandler(menuController.addDressing)
+  asyncHandler(menuController.upsertDressing)
 );
 
 // Get dressing
@@ -145,12 +153,12 @@ router.get(
 );
 
 // Update dressing
-router.patch(
-  "/:restaurantId/categories/:categoryId/dressing",
-  verifyToken,
-  canManageMenuCategory,
-  asyncHandler(menuController.updateDressing)
-);
+// router.patch(
+//   "/:restaurantId/categories/:categoryId/dressing",
+//   verifyToken,
+//   canManageMenuCategory,
+//   asyncHandler(menuController.updateDressing)
+// );
 
 // Toggle dressing status
 router.patch(
