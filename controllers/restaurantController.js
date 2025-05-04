@@ -103,49 +103,103 @@ exports.createRestaurant = async (req, res, next) => {
 };
 
 //get all restaurants
+const moment = require("moment-timezone");
+
 exports.getAllRestaurants = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      sortBy = "createdAt",
-      order = "desc",
-      search = "",
-      status,
-      cuisine,
-      city,
-    } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    const query = {};
+    const search = req.query.search?.trim() || "";
+    const order = req.query.order || "createdAt";
+    const dir = req.query.dir === "asc" ? 1 : -1;
+
+    const filter = {};
 
     if (search) {
-      query.restaurant_name = { $regex: search, $options: "i" };
+      filter.$or = [
+        { customer_id: { $regex: search, $options: "i" } },
+        { restaurant_name: { $regex: search, $options: "i" } },
+        { "address.city": { $regex: search, $options: "i" } },
+        { "address.postalCode": { $regex: search, $options: "i" } },
+      ];
     }
 
-    if (status === "active") query.isActive = true;
-    else if (status === "inactive") query.isActive = false;
+    if (req.query.status === "active") filter.isActive = true;
+    else if (req.query.status === "inactive") filter.isActive = false;
 
-    if (cuisine) query.cuisine_type = cuisine;
-    if (city) query["address.city"] = { $regex: city, $options: "i" };
+    if (req.query.visibility === "true") filter.visibility = true;
+    if (req.query.visibility === "false") filter.visibility = false;
 
-    const total = await Restaurant.countDocuments(query);
+    if (req.query.cuisine) filter.cuisine_type = req.query.cuisine;
 
-    const restaurants = await Restaurant.find(query)
-      .select("-password")
-      .populate("cuisine_type")
-      .sort({ [sortBy]: order === "asc" ? 1 : -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+    const [restaurants, total] = await Promise.all([
+      Restaurant.find(filter)
+        .select(
+          "_id restaurant_name username phoneNumber email isHalal isActive visibility created_by createdAt updatedAt address images.logo opening_hours customer_id"
+        )
+        .populate("cuisine_type", "name")
+        .sort({ [order]: dir })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Restaurant.countDocuments(filter),
+    ]);
+
+    // Append open/close status based on Berlin time
+    const now = moment().tz("Europe/Berlin");
+    const currentDay = now.format("dddd").toLowerCase();
+    const currentTime = parseFloat(now.format("HH.mm"));
+
+    restaurants.forEach((restaurant) => {
+      const hours = restaurant.opening_hours?.[currentDay];
+      if (!hours || hours.ifClosed) {
+        restaurant.isOpenNow = false;
+      } else {
+        const open = parseFloat(hours.opening.replace(":", "."));
+        let close = parseFloat(hours.closing.replace(":", "."));
+        if (hours.nextDay && currentTime < open) {
+          restaurant.isOpenNow = currentTime < close;
+        } else {
+          restaurant.isOpenNow =
+            currentTime >= open && (hours.nextDay || currentTime < close);
+        }
+      }
+    });
 
     res.status(200).json({
       success: true,
+      data: restaurants,
       total,
-      page: Number(page),
+      currentPage: page,
       totalPages: Math.ceil(total / limit),
-      restaurants,
     });
   } catch (err) {
-    console.error("Get all restaurants error:", err);
+    console.error("❌ Get all restaurants error:", err);
+    res.status(500).json({ success: false, message: "server_error" });
+  }
+};
+
+// 🔍 Quick search for app header
+exports.quickSearchRestaurants = async (req, res) => {
+  try {
+    const q = req.query.q?.trim();
+    if (!q) return res.status(200).json({ success: true, results: [] });
+
+    const results = await Restaurant.find({
+      $or: [
+        { restaurant_name: { $regex: q, $options: "i" } },
+        { customer_id: { $regex: q, $options: "i" } },
+      ],
+    })
+      .select("_id restaurant_name customer_id address")
+      .limit(10)
+      .lean();
+
+    res.status(200).json({ success: true, results });
+  } catch (err) {
+    console.error("❌ Quick search error:", err);
     res.status(500).json({ success: false, message: "server_error" });
   }
 };

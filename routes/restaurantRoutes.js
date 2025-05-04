@@ -26,6 +26,14 @@ router.get(
   restaurantController.getAllRestaurants
 );
 
+// quick search
+router.get(
+  "/quick-search",
+  verifyToken, // optional: remove if it's a public search
+  allAdminUsers,
+  asyncHandler(restaurantController.quickSearchRestaurants)
+);
+
 // 📄 Get single
 router.get(
   "/:restaurantId",

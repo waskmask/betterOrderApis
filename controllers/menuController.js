@@ -1308,22 +1308,27 @@ exports.toggleAddon = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const addon = category.addons[index];
-    if (!addon) return res.status(404).json({ message: "Addon not found" });
+    if (!addon) return res.status(404).json({ message: "addon_not_found" });
 
     addon.isActive = !addon.isActive;
     await restaurant.save();
 
+    // Return message without spaces
+    const message = addon.isActive
+      ? "addon_is_now_active"
+      : "addon_is_now_inactive";
+
     res.status(200).json({
       success: true,
-      message: `Addon is now ${addon.isActive ? "active" : "inactive"}`,
+      message,
       addon,
     });
   } catch (err) {
     console.error("❌ Toggle addon error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -1335,21 +1340,19 @@ exports.deleteAddon = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     if (!category.addons || !category.addons[index]) {
-      return res.status(404).json({ message: "Addon not found" });
+      return res.status(404).json({ message: "addon_not_found" });
     }
 
     category.addons.splice(index, 1);
     await restaurant.save();
 
-    res
-      .status(200)
-      .json({ success: true, message: "Addon deleted successfully" });
+    res.status(200).json({ success: true, message: "addon_deleted" });
   } catch (err) {
     console.error("❌ Delete addon error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -1361,26 +1364,30 @@ exports.toggleAddonOptionStatus = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const addon = category.addons[addonIndex];
-    if (!addon) return res.status(404).json({ message: "Addon not found" });
+    if (!addon) return res.status(404).json({ message: "addon_not_found" });
 
     const option = addon.options[optionIndex];
-    if (!option) return res.status(404).json({ message: "Option not found" });
+    if (!option) return res.status(404).json({ message: "option_not_found" });
 
     option.isActive = !option.isActive;
 
     await restaurant.save();
+    // Return message without spaces
+    const message = option.isActive
+      ? "option_is_now_active"
+      : "option_is_now_inactive";
 
     res.status(200).json({
       success: true,
-      message: `Option is now ${option.isActive ? "active" : "inactive"}`,
+      message,
       option,
     });
   } catch (err) {
     console.error("❌ Toggle addon option error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
 
@@ -1392,11 +1399,11 @@ exports.deleteAddonOption = async (req, res) => {
     const restaurant = await Restaurant.findById(restaurantId);
     const category = restaurant?.menu.id(categoryId);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({ message: "category_not_found" });
 
     const addon = category.addons[addonIndex];
     if (!addon || !addon.options[optionIndex]) {
-      return res.status(404).json({ message: "Addon option not found" });
+      return res.status(404).json({ message: "addon_option_not_found" });
     }
 
     addon.options.splice(optionIndex, 1);
@@ -1404,10 +1411,10 @@ exports.deleteAddonOption = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Addon option deleted successfully",
+      message: "addon_option_deleted",
     });
   } catch (err) {
     console.error("❌ Delete addon option error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "server_error" });
   }
 };
