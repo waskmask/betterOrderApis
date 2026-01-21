@@ -20,18 +20,24 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
-const whitelist = ["http://localhost:5000"]; // frontend origin
+const whitelist = ["http://localhost:5000", "http://localhost:5173", "http://localhost:3001"]; // frontend origins
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || whitelist.includes(origin)) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (whitelist.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true, // ✅ allows cookies
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-session-id"],
+    exposedHeaders: ["Set-Cookie"],
   })
 );
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -62,6 +68,13 @@ app.use("/api/restaurant-auth", restaurantAuthRoutes);
 app.use("/api/admin-users", adminUserRoutes);
 app.use("/api/restaurant-menu", restaurantMenuRoutes);
 app.use("/api/restaurant-profile", restaurantProfileRoutes);
+app.use("/api/customer", require("./routes/customerAuthRoutes"));
+app.use("/api/public", require("./routes/publicRoutes"));
+app.use("/api/cart", require("./routes/cartRoutes"));
+app.use("/api/orders", require("./routes/orderRoutes"));
+app.use("/api/favorites", require("./routes/favoriteRoutes"));
+app.use("/api/customer/address", require("./routes/addressRoutes"));
+app.use("/api/reviews", require("./routes/reviewRoutes"));
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });

@@ -49,12 +49,22 @@ exports.login = async (req, res) => {
   delete sanitizedUser.password;
 
   // ✅ Set secure cookie
-  res.cookie("token", token, {
+  const isProduction = process.env.NODE_ENV === "production";
+  
+  // Cookie options optimized for localhost development
+  // For localhost with different ports, browsers treat it as same-site
+  // but we use "lax" which should work for most cases
+  const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProduction, // false for localhost (http), true for production (https)
+    sameSite: isProduction ? "none" : "lax", // "lax" for localhost, "none" for production cross-origin
+    path: "/", // Available for all routes
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+    // Note: Do NOT set domain for localhost - let browser handle it automatically
+  };
+  
+  res.cookie("token", token, cookieOptions);
+
 
   res.status(200).json({
     success: true,

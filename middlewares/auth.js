@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const AdminUser = require("../modals/AdminUser");
 const { Restaurant } = require("../modals/Restaurant");
+const Customer = require("../modals/Customer");
 
 exports.verifyToken = async (req, res, next) => {
   // 📦 Get token from cookie OR Authorization header
@@ -55,6 +56,24 @@ exports.verifyToken = async (req, res, next) => {
         tokenVersion: decoded.tokenVersion,
       };
       console.log("✅ Authenticated as Restaurant:", restaurant.email);
+      return next();
+    }
+
+    // 🔍 Check if customer
+    const customer = await Customer.findById(decoded.id);
+    if (customer && customer.isActive) {
+      if (decoded.tokenVersion !== customer.tokenVersion) {
+        return res
+          .status(401)
+          .json({ message: "Session expired. Please log in again." });
+      }
+
+      req.user = {
+        ...customer.toObject(),
+        role: "customer",
+        tokenVersion: decoded.tokenVersion,
+      };
+      console.log("✅ Authenticated as Customer:", customer.email);
       return next();
     }
 
@@ -134,6 +153,14 @@ exports.loggedInAdmin = (req, res, next) => {
 exports.isRestaurantSelf = (req, res, next) => {
   if (req.user.role !== "restaurant") {
     return res.status(403).json({ message: "Access denied" });
+  }
+  next();
+};
+
+//loggedIn customer
+exports.isCustomer = (req, res, next) => {
+  if (req.user.role !== "customer") {
+    return res.status(403).json({ message: "Access denied: Customer only" });
   }
   next();
 };
