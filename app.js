@@ -29,8 +29,7 @@ const whitelist = [
   "http://localhost:3000",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5000",
-  // Add your Netlify domain here
-  // "https://your-app.netlify.app",
+  "https://modest-colden.217-154-80-239.plesk.page",  // Production frontend
 ];
 
 app.use(
