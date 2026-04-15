@@ -13,6 +13,9 @@ const restaurantAuthRoutes = require("./routes/restaurantAuthRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const restaurantMenuRoutes = require("./routes/restaurantMenuRoutes");
 const restaurantProfileRoutes = require("./routes/restaurantProfileRoutes");
+const contactRoutes = require("./routes/contactRoutes");
+const suggestRestaurantRoutes = require("./routes/suggestRestaurantRoutes");
+const restaurantOnboardingRoutes = require("./routes/restaurantOnboardingRoutes");
 
 dotenv.config();
 
@@ -20,14 +23,23 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
-const whitelist = ["http://localhost:5000"]; // frontend origin
+const whitelist = [
+  "http://localhost:5000",
+  "http://localhost:5173",  // Vite dev server
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5000",
+  "https://modest-colden.217-154-80-239.plesk.page",  // Production frontend
+];
 
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
       if (!origin || whitelist.includes(origin)) {
         callback(null, true);
       } else {
+        console.log("Blocked origin:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -62,6 +74,9 @@ app.use("/api/restaurant-auth", restaurantAuthRoutes);
 app.use("/api/admin-users", adminUserRoutes);
 app.use("/api/restaurant-menu", restaurantMenuRoutes);
 app.use("/api/restaurant-profile", restaurantProfileRoutes);
+app.use("/api/contact", contactRoutes);
+app.use("/api/suggest-restaurant", suggestRestaurantRoutes);
+app.use("/api/restaurant-onboarding", restaurantOnboardingRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
