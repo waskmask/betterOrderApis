@@ -1,5 +1,6 @@
 const Contact = require("../modals/Contact");
 const asyncHandler = require("../utils/asyncHandler");
+const { buildDiacriticInsensitiveRegex } = require("../utils/searchNormalize");
 
 // @desc    Submit contact form
 // @route   POST /api/contact
@@ -102,11 +103,14 @@ const getAllContacts = asyncHandler(async (req, res) => {
   }
 
   if (search) {
-    query.$or = [
-      { fullName: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
-      { phone: { $regex: search, $options: "i" } },
-    ];
+    const searchRegex = buildDiacriticInsensitiveRegex(search);
+    if (searchRegex) {
+      query.$or = [
+        { fullName: { $regex: searchRegex } },
+        { email: { $regex: searchRegex } },
+        { phone: { $regex: searchRegex } },
+      ];
+    }
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);

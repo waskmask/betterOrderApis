@@ -3,18 +3,21 @@ const router = express.Router();
 const asyncHandler = require("../utils/asyncHandler");
 const {
   verifyToken,
-  allAdminUsers,
   canManageMenuCategory,
+  canViewRestaurant,
+  bindRestaurantIdFromBody,
 } = require("../middlewares/auth");
-const { uploadImage, processImage } = require("../middlewares/uploadImage");
+const { uploadImage, uploadLargeImage, processImage } = require("../middlewares/uploadImage");
 const restaurantProfileController = require("../controllers/restaurantProfileController");
+const restaurantCoverAiController = require("../controllers/restaurantCoverAiController");
 
 // upload restaurant cover
 router.post(
   "/upload-logo",
   verifyToken,
-  canManageMenuCategory,
   uploadImage,
+  bindRestaurantIdFromBody,
+  canManageMenuCategory,
   processImage("restaurantImagePath"),
   asyncHandler(restaurantProfileController.uploadLogo)
 );
@@ -22,10 +25,36 @@ router.post(
 router.post(
   "/upload-cover",
   verifyToken,
+  uploadLargeImage,
+  bindRestaurantIdFromBody,
   canManageMenuCategory,
-  uploadImage,
-  processImage("restaurantImagePath"),
+  processImage({
+    fieldName: "restaurantImagePath",
+    maxWidth: 1600,
+    webpQuality: 90,
+  }),
   asyncHandler(restaurantProfileController.uploadCover)
+);
+
+router.post(
+  "/:restaurantId/cover-ai/generate",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantCoverAiController.generateCoverAi)
+);
+
+router.get(
+  "/:restaurantId/cover-ai/assets",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantCoverAiController.listCoverAiAssets)
+);
+
+router.get(
+  "/:restaurantId/cover-ai/assets/:index/data",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantCoverAiController.getCoverAiAssetData)
 );
 
 // toggle delivery and take-away
@@ -48,7 +77,7 @@ router.post(
 router.get(
   "/:restaurantId/delivery-zones",
   verifyToken,
-  allAdminUsers,
+  canViewRestaurant,
   asyncHandler(restaurantProfileController.getAllDeliveryZones)
 );
 
@@ -80,8 +109,36 @@ router.put(
 router.get(
   "/:restaurantId/opening-hours",
   verifyToken,
-  canManageMenuCategory,
+  canViewRestaurant,
   asyncHandler(restaurantProfileController.getOpeningHours)
+);
+
+router.get(
+  "/:restaurantId/order-settings",
+  verifyToken,
+  canViewRestaurant,
+  asyncHandler(restaurantProfileController.getOrderSettings)
+);
+
+router.patch(
+  "/:restaurantId/order-settings",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantProfileController.updateOrderSettings)
+);
+
+router.patch(
+  "/:restaurantId/orders-pause",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantProfileController.pauseOrders)
+);
+
+router.patch(
+  "/:restaurantId/orders-resume",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantProfileController.resumeOrders)
 );
 
 module.exports = router;

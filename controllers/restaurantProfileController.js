@@ -1,32 +1,85 @@
-const path = require("path");
-const fs = require("fs");
 const { Restaurant } = require("../modals/Restaurant");
+const { deleteObjectByRelativePath } = require("../utils/r2Storage");
+const { getCurrentBusinessShift } = require("../services/businessShiftService");
+const {
+  normalizeRestaurantPrinters,
+  validatePrintersPayload,
+  primaryPrinterConfig,
+  printersForStorage,
+  normalizePrintRoles,
+} = require("../services/printerConfigService");
+
+const parseMoneyToCents = (value, fallback = 0) => {
+  const parsed = parseFloat((value ?? String(fallback)).toString().replace(",", "."));
+  return Number.isNaN(parsed)
+    ? NaN
+    : Math.round((parsed + Number.EPSILON) * 100);
+};
+
+const storedDeliveryMoneyToEuroNumber = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(((parsed / 100) + Number.EPSILON) * 100) / 100;
+};
+
+const formatDeliveryZoneForResponse = (zone) => {
+  const normalized = typeof zone?.toObject === "function" ? zone.toObject() : { ...zone };
+  return {
+    ...normalized,
+    charges: storedDeliveryMoneyToEuroNumber(normalized.charges),
+    min_order_value: storedDeliveryMoneyToEuroNumber(normalized.min_order_value),
+    free_delivery_min_order: storedDeliveryMoneyToEuroNumber(
+      normalized.free_delivery_min_order
+    ),
+  };
+};
 
 // upload logo or cover
 const handleImageUpload = async (req, res, type) => {
   try {
-    const { restaurantId } = req.body;
+    const { restaurantId, sourceAssetPath } = req.body;
 
     if (!restaurantId) {
+      await deleteObjectByRelativePath(req.restaurantImagePath);
       return res
         .status(400)
         .json({ message: "restaurantId_is_required_in_body" });
     }
 
+    if (
+      req.user?.role === "restaurant" &&
+      String(req.user._id) !== String(restaurantId)
+    ) {
+      await deleteObjectByRelativePath(req.restaurantImagePath);
+      return res.status(403).json({ message: "Access denied: Not authorized" });
+    }
+
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
+      await deleteObjectByRelativePath(req.restaurantImagePath);
       return res.status(404).json({ message: "restaurant_not_found" });
     }
+
+    if (!restaurant.images) restaurant.images = {};
 
     const currentImage = restaurant.images[type];
 
     // Delete old image if exists
     if (currentImage) {
-      const oldPath = path.join(__dirname, "../", currentImage);
-      fs.existsSync(oldPath) && fs.unlinkSync(oldPath);
+      await deleteObjectByRelativePath(currentImage);
     }
 
     restaurant.images[type] = req.restaurantImagePath;
+
+    if (type === "cover") {
+      const candidate = typeof sourceAssetPath === "string" ? sourceAssetPath.trim() : "";
+      const assets = Array.isArray(restaurant.images.coverAssets)
+        ? restaurant.images.coverAssets
+        : [];
+      const matched = candidate && assets.some((a) => a?.path === candidate);
+      restaurant.images.coverSourceAsset = matched ? candidate : undefined;
+    }
+
     await restaurant.save();
 
     res.status(200).json({
@@ -35,9 +88,13 @@ const handleImageUpload = async (req, res, type) => {
         type === "logo" ? "logo" : "cover_image"
       } uploaded successfully`,
       [type]: restaurant.images[type],
+      ...(type === "cover"
+        ? { coverSourceAsset: restaurant.images.coverSourceAsset || null }
+        : {}),
     });
   } catch (err) {
     console.error(`Upload ${type} error:`, err);
+    await deleteObjectByRelativePath(req.restaurantImagePath);
     res.status(500).json({ message: "server_error", success: false });
   }
 };
@@ -83,8 +140,14 @@ exports.toggleDeliveryOrTakeaway = async (req, res) => {
 exports.addDeliveryZone = async (req, res) => {
   try {
     const { restaurantId } = req.params;
-    let { postalCode, charges, free, delivery_time, min_order_value } =
-      req.body;
+    let {
+      postalCode,
+      charges,
+      free,
+      delivery_time,
+      min_order_value,
+      free_delivery_min_order,
+    } = req.body;
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant)
@@ -94,10 +157,15 @@ exports.addDeliveryZone = async (req, res) => {
       return res.status(400).json({ message: "postal_code_already_exists" });
     }
 
-    charges = parseFloat((charges || "0").toString().replace(",", "."));
-    min_order_value = parseFloat(min_order_value.toString().replace(",", "."));
+    charges = parseMoneyToCents(charges);
+    min_order_value = parseMoneyToCents(min_order_value);
+    free_delivery_min_order = parseMoneyToCents(free_delivery_min_order, 0);
 
-    if (isNaN(charges) || isNaN(min_order_value)) {
+    if (
+      isNaN(charges) ||
+      isNaN(min_order_value) ||
+      isNaN(free_delivery_min_order)
+    ) {
       return res.status(400).json({ message: "invalid_price_format" });
     }
 
@@ -109,6 +177,7 @@ exports.addDeliveryZone = async (req, res) => {
       free: isFree,
       delivery_time,
       min_order_value,
+      free_delivery_min_order: isFree ? 0 : Math.max(0, free_delivery_min_order),
     };
 
     restaurant.delivering_at.push(newZone);
@@ -116,7 +185,7 @@ exports.addDeliveryZone = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "delivery_zone_added",
-      zone: newZone,
+      zone: formatDeliveryZoneForResponse(newZone),
     });
   } catch (err) {
     console.error("add_zone_error:", err);
@@ -138,7 +207,7 @@ exports.getAllDeliveryZones = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      delivery_zones: restaurant.delivering_at || [],
+      delivery_zones: (restaurant.delivering_at || []).map(formatDeliveryZoneForResponse),
     });
   } catch (err) {
     console.error("❌ Get delivery zones error:", err);
@@ -150,8 +219,15 @@ exports.getAllDeliveryZones = async (req, res) => {
 exports.updateDeliveryZone = async (req, res) => {
   try {
     const { restaurantId } = req.params;
-    let { index, postalCode, charges, free, delivery_time, min_order_value } =
-      req.body;
+    let {
+      index,
+      postalCode,
+      charges,
+      free,
+      delivery_time,
+      min_order_value,
+      free_delivery_min_order,
+    } = req.body;
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant || !restaurant.delivering_at[index])
@@ -163,10 +239,17 @@ exports.updateDeliveryZone = async (req, res) => {
     if (delivery_time) zone.delivery_time = delivery_time;
 
     // Normalize charges and min order value
-    charges = parseFloat((charges || "0").toString().replace(",", "."));
-    min_order_value = parseFloat(
-      (min_order_value || "0").toString().replace(",", ".")
-    );
+    charges = parseMoneyToCents(charges);
+    min_order_value = parseMoneyToCents(min_order_value, 0);
+    free_delivery_min_order = parseMoneyToCents(free_delivery_min_order, 0);
+
+    if (
+      isNaN(charges) ||
+      isNaN(min_order_value) ||
+      isNaN(free_delivery_min_order)
+    ) {
+      return res.status(400).json({ message: "invalid_price_format" });
+    }
 
     // Determine if it's free
     const isFree = !!free || charges === 0;
@@ -176,14 +259,17 @@ exports.updateDeliveryZone = async (req, res) => {
     zone.charges = isFree ? 0 : charges;
 
     // Always update min_order_value
-    zone.min_order_value = isNaN(min_order_value) ? 0 : min_order_value;
+    zone.min_order_value = min_order_value;
+    zone.free_delivery_min_order = isFree
+      ? 0
+      : Math.max(0, free_delivery_min_order);
 
     await restaurant.save();
 
     res.status(200).json({
       success: true,
       message: "delivery_zone_updated",
-      zone,
+      zone: formatDeliveryZoneForResponse(zone),
     });
   } catch (err) {
     console.error("update_zone_error", err);
@@ -374,5 +460,200 @@ exports.getOpeningHours = async (req, res) => {
   } catch (err) {
     console.error("get_opening_hours_error", err);
     res.status(500).json({ message: "server_error" });
+  }
+};
+
+exports.getOrderSettings = async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await Restaurant.findById(restaurantId).select(
+      "orderSettings ordersPausedUntil opening_hours printerConfig printers printAgentLastSeenAt printAgentTokenHash"
+    );
+    if (!restaurant) {
+      return res.status(404).json({ message: "restaurant_not_found" });
+    }
+
+    const { shiftStart } = getCurrentBusinessShift(restaurant.opening_hours || {});
+    const { isPrintAgentHealthy } = require("../services/orderPrintService");
+
+    return res.json({
+      success: true,
+      orderSettings: restaurant.orderSettings || { acceptTimeoutMinutes: 10 },
+      ordersPausedUntil: restaurant.ordersPausedUntil || null,
+      businessShiftStart: shiftStart.toISOString(),
+      printerConfig: primaryPrinterConfig(restaurant),
+      printers: normalizeRestaurantPrinters(restaurant),
+      printAgentOnline: isPrintAgentHealthy(restaurant.printAgentLastSeenAt),
+      printAgentLastSeenAt: restaurant.printAgentLastSeenAt || null,
+      hasPrintAgentToken: Boolean(restaurant.printAgentTokenHash),
+    });
+  } catch (err) {
+    console.error("get_order_settings_error", err);
+    return res.status(500).json({ success: false, message: "server_error" });
+  }
+};
+
+exports.updateOrderSettings = async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      return res.status(404).json({ message: "restaurant_not_found" });
+    }
+
+    const current = restaurant.orderSettings?.toObject?.() || restaurant.orderSettings || {};
+    const next = { ...current };
+
+    if (req.body?.acceptTimeoutMinutes != null) {
+      const minutes = Number.parseInt(req.body.acceptTimeoutMinutes, 10);
+      if (!Number.isFinite(minutes) || minutes < 3 || minutes > 30) {
+        return res.status(400).json({ message: "invalid_accept_timeout_minutes" });
+      }
+      next.acceptTimeoutMinutes = minutes;
+    }
+
+    if (typeof req.body?.autoAcceptEnabled === "boolean") {
+      next.autoAcceptEnabled = req.body.autoAcceptEnabled;
+    }
+
+    if (req.body?.autoAcceptDeliveryMinutes != null) {
+      const minutes = Number.parseInt(req.body.autoAcceptDeliveryMinutes, 10);
+      if (!Number.isFinite(minutes) || minutes < 30 || minutes > 120) {
+        return res.status(400).json({ message: "invalid_auto_accept_delivery_minutes" });
+      }
+      next.autoAcceptDeliveryMinutes = minutes;
+    }
+
+    if (req.body?.autoAcceptTakeawayMinutes != null) {
+      const minutes = Number.parseInt(req.body.autoAcceptTakeawayMinutes, 10);
+      if (!Number.isFinite(minutes) || minutes < 15 || minutes > 120) {
+        return res.status(400).json({ message: "invalid_auto_accept_takeaway_minutes" });
+      }
+      next.autoAcceptTakeawayMinutes = minutes;
+    }
+
+    if (typeof req.body?.autoDetectPrinters === "boolean") {
+      next.autoDetectPrinters = req.body.autoDetectPrinters;
+    }
+
+    if (typeof req.body?.autoPrintOnAccept === "boolean") {
+      next.autoPrintOnAccept = req.body.autoPrintOnAccept;
+    }
+
+    if (Array.isArray(req.body?.printRolesOnAccept)) {
+      next.printRolesOnAccept = normalizePrintRoles(req.body.printRolesOnAccept);
+    }
+
+    const $set = { orderSettings: next };
+
+    if (Array.isArray(req.body?.printers)) {
+      const validated = validatePrintersPayload(req.body.printers);
+      if (!validated.ok) {
+        return res.status(400).json({ message: validated.message });
+      }
+      $set.printers = printersForStorage(validated.printers);
+      $set.printerConfig = primaryPrinterConfig({ printers: validated.printers });
+    } else if (req.body?.printerConfig && typeof req.body.printerConfig === "object") {
+      const printer = restaurant.printerConfig?.toObject?.() || restaurant.printerConfig || {};
+      if (typeof req.body.printerConfig.connectionType === "string") {
+        const connectionType = req.body.printerConfig.connectionType.trim().toLowerCase();
+        if (["network", "bluetooth"].includes(connectionType)) {
+          printer.connectionType = connectionType;
+        }
+      }
+      if (typeof req.body.printerConfig.host === "string") {
+        printer.host = req.body.printerConfig.host.trim().slice(0, 120);
+      }
+      if (typeof req.body.printerConfig.serialPort === "string") {
+        printer.serialPort = req.body.printerConfig.serialPort.trim().slice(0, 20).toUpperCase();
+      }
+      if (typeof req.body.printerConfig.windowsPrinterName === "string") {
+        printer.windowsPrinterName = req.body.printerConfig.windowsPrinterName.trim().slice(0, 120);
+      }
+      if (req.body.printerConfig.port != null) {
+        const port = Number.parseInt(req.body.printerConfig.port, 10);
+        if (!Number.isFinite(port) || port < 1 || port > 65535) {
+          return res.status(400).json({ message: "invalid_printer_port" });
+        }
+        printer.port = port;
+      }
+      if (req.body.printerConfig.copies != null) {
+        const copies = Number.parseInt(req.body.printerConfig.copies, 10);
+        if (!Number.isFinite(copies) || copies < 1 || copies > 3) {
+          return res.status(400).json({ message: "invalid_printer_copies" });
+        }
+        printer.copies = copies;
+      }
+      if (typeof req.body.printerConfig.enabled === "boolean") {
+        printer.enabled = req.body.printerConfig.enabled;
+      }
+      $set.printerConfig = printer;
+      if (!restaurant.printers?.length) {
+        $set.printers = normalizeRestaurantPrinters({ printerConfig: printer });
+      }
+    }
+
+    const updated = await Restaurant.findByIdAndUpdate(
+      restaurantId,
+      { $set },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      return res.status(404).json({ message: "restaurant_not_found" });
+    }
+
+    return res.json({
+      success: true,
+      orderSettings: updated.orderSettings,
+      printerConfig: primaryPrinterConfig(updated),
+      printers: normalizeRestaurantPrinters(updated),
+    });
+  } catch (err) {
+    console.error("update_order_settings_error", err);
+    return res.status(500).json({ success: false, message: "server_error" });
+  }
+};
+
+exports.pauseOrders = async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const minutes = Number.parseInt(req.body?.minutes, 10);
+    if (![30, 60, 90].includes(minutes)) {
+      return res.status(400).json({ message: "invalid_pause_minutes" });
+    }
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      return res.status(404).json({ message: "restaurant_not_found" });
+    }
+
+    restaurant.ordersPausedUntil = new Date(Date.now() + minutes * 60 * 1000);
+    await restaurant.save();
+
+    return res.json({
+      success: true,
+      ordersPausedUntil: restaurant.ordersPausedUntil,
+    });
+  } catch (err) {
+    console.error("pause_orders_error", err);
+    return res.status(500).json({ success: false, message: "server_error" });
+  }
+};
+
+exports.resumeOrders = async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      return res.status(404).json({ message: "restaurant_not_found" });
+    }
+
+    restaurant.ordersPausedUntil = null;
+    await restaurant.save();
+
+    return res.json({ success: true, ordersPausedUntil: null });
+  } catch (err) {
+    console.error("resume_orders_error", err);
+    return res.status(500).json({ success: false, message: "server_error" });
   }
 };

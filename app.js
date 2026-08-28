@@ -1,11 +1,18 @@
 const express = require("express");
+const http = require("http");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const connectDB = require("./config/db");
+const { startOrderExpiryService } = require("./services/orderExpiryService");
+const { startOutboxWorker } = require("./services/outboxService");
+const { startScheduledReleaseService } = require("./services/orderReleaseService");
+const { initOrderRealtimeRedis } = require("./services/orderRealtimeService");
+const opsMonitoringController = require("./controllers/opsMonitoringController");
 const passport = require("./utils/passport");
 const errorHandler = require("./middlewares/errorHandler");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const adminRoutes = require("./routes/adminAuthRoutes");
 const cuisineRoutes = require("./routes/cuisineRoutes");
 const restaurantRoutes = require("./routes/restaurantRoutes");
@@ -16,19 +23,39 @@ const restaurantProfileRoutes = require("./routes/restaurantProfileRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const suggestRestaurantRoutes = require("./routes/suggestRestaurantRoutes");
 const restaurantOnboardingRoutes = require("./routes/restaurantOnboardingRoutes");
+const restaurantStaffRoutes = require("./routes/restaurantStaffRoutes");
+const appUserRoutes = require("./routes/appUserRoutes");
+const foodInfoRoutes = require("./routes/foodInfoRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const mobileRoutes = require("./routes/mobileRoutes");
+const dineInRoutes = require("./routes/dineInRoutes");
+const moduleRoutes = require("./routes/moduleRoutes");
+const platformSettingsRoutes = require("./routes/platformSettingsRoutes");
+const printRoutes = require("./routes/printRoutes");
+const { getPublicUploadUrl, isR2Configured } = require("./utils/r2Storage");
+const { initRealtimeSocket } = require("./services/realtimeSocketService");
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+const server = http.createServer(app);
+const uploadsDir = path.join(__dirname, "uploads");
+const publicDir = path.join(__dirname, "public");
+const serveLocalUploads = express.static(uploadsDir);
+const servePublicAssets = express.static(publicDir);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 
 const whitelist = [
-  "http://localhost:5000",
+  "http://localhost:4001",
+  "http://localhost:4002",
+  "http://localhost:4003",
   "http://localhost:5173",  // Vite dev server
-  "http://localhost:3000",
   "http://127.0.0.1:5173",
-  "http://127.0.0.1:5000",
+  "http://127.0.0.1:4001",
+  "http://127.0.0.1:4002",
+  "http://127.0.0.1:4003",
   "https://modest-colden.217-154-80-239.plesk.page",  // Production frontend
 ];
 
@@ -46,7 +73,22 @@ app.use(
     credentials: true, // ✅ allows cookies
   })
 );
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", (req, res, next) => {
+  const localPath = path.resolve(uploadsDir, `.${req.path}`);
+  const isInsideUploads =
+    localPath === uploadsDir || localPath.startsWith(`${uploadsDir}${path.sep}`);
+  if (isInsideUploads && fs.existsSync(localPath)) {
+    return serveLocalUploads(req, res, next);
+  }
+
+  if (isR2Configured()) {
+    const publicUrl = getPublicUploadUrl(`/uploads${req.path}`);
+    if (publicUrl) return res.redirect(302, publicUrl);
+  }
+
+  return next();
+});
+app.use("/public", servePublicAssets);
 app.use(passport.initialize());
 
 app.get("/ping", (req, res) => {
@@ -74,9 +116,19 @@ app.use("/api/restaurant-auth", restaurantAuthRoutes);
 app.use("/api/admin-users", adminUserRoutes);
 app.use("/api/restaurant-menu", restaurantMenuRoutes);
 app.use("/api/restaurant-profile", restaurantProfileRoutes);
+app.use("/api/app-users", appUserRoutes);
+app.use("/api/food-info", foodInfoRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/print", printRoutes);
+app.get("/api/ops/monitoring", require("./middlewares/auth").verifyToken, opsMonitoringController.getOpsMonitoring);
+app.use("/api/mobile", mobileRoutes);
+app.use("/api/dine-in", dineInRoutes);
+app.use("/api/modules", moduleRoutes);
+app.use("/api/platform-settings", platformSettingsRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/suggest-restaurant", suggestRestaurantRoutes);
 app.use("/api/restaurant-onboarding", restaurantOnboardingRoutes);
+app.use("/api/restaurant-staff", restaurantStaffRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
@@ -93,18 +145,24 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception thrown:", err);
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
+
+initRealtimeSocket(server, { corsOrigins: whitelist });
 
 const startServer = async () => {
   try {
     await connectDB();
     console.log("✅ MongoDB connected");
+    startOrderExpiryService();
+    startScheduledReleaseService();
+    startOutboxWorker();
+    await initOrderRealtimeRedis();
   } catch (err) {
     console.error("❌ MongoDB error:", err.message);
     console.warn("⚠️ Starting server without DB connection (offline mode)");
   }
 
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
 };

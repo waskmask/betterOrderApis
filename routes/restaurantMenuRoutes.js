@@ -4,6 +4,25 @@ const asyncHandler = require("../utils/asyncHandler");
 const menuController = require("../controllers/menuController");
 const { verifyToken, canManageMenuCategory } = require("../middlewares/auth");
 const { uploadImage, processImage } = require("../middlewares/uploadImage");
+const { processMenuItemImage } = require("../utils/menuItemImage");
+const { Restaurant } = require("../modals/Restaurant");
+const { getAppModuleConfig } = require("../services/moduleConfigService");
+const { effectiveRestaurantModules } = require("../utils/modules");
+
+async function requireFoodInfoModule(req, res, next) {
+  const restaurant = await Restaurant.findById(req.params.restaurantId)
+    .select("_id modules delivery take_away")
+    .lean();
+  if (!restaurant) {
+    return res.status(404).json({ success: false, message: "restaurant_not_found" });
+  }
+  const appModules = await getAppModuleConfig();
+  const modules = effectiveRestaurantModules(restaurant, appModules);
+  if (!modules.foodInfo) {
+    return res.status(403).json({ success: false, message: "food_info_unavailable" });
+  }
+  return next();
+}
 
 // Add Category
 router.post(
@@ -62,6 +81,8 @@ router.post(
   "/:restaurantId/category/:categoryId/item",
   verifyToken,
   canManageMenuCategory,
+  uploadImage,
+  processMenuItemImage(),
   asyncHandler(menuController.addMenuItem)
 );
 
@@ -78,6 +99,8 @@ router.put(
   "/:restaurantId/category/:categoryId/item/:itemId",
   verifyToken,
   canManageMenuCategory,
+  uploadImage,
+  processMenuItemImage(),
   asyncHandler(menuController.updateMenuItem)
 );
 
@@ -87,6 +110,22 @@ router.patch(
   verifyToken,
   canManageMenuCategory,
   asyncHandler(menuController.toggleItemActiveStatus)
+);
+
+router.get(
+  "/:restaurantId/category/:categoryId/item/:itemId/food-info",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(requireFoodInfoModule),
+  asyncHandler(menuController.getMenuItemFoodInfo)
+);
+
+router.patch(
+  "/:restaurantId/category/:categoryId/item/:itemId/food-info",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(requireFoodInfoModule),
+  asyncHandler(menuController.upsertMenuItemFoodInfo)
 );
 
 // add extra menu
@@ -239,5 +278,8 @@ router.delete(
   canManageMenuCategory,
   asyncHandler(menuController.deleteAddonOption)
 );
+
+
+
 
 module.exports = router;

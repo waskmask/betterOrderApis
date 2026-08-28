@@ -49,7 +49,7 @@ exports.login = async (req, res) => {
   delete sanitizedUser.password;
 
   // ✅ Set secure cookie
-  res.cookie("token", token, {
+  res.cookie("bo_ad_token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -100,14 +100,15 @@ exports.changePassword = async (req, res, next) => {
 
     // 📝 (Optional) Audit log example — add this if needed
     const logEntry = {
+      action: "password_change",
       reset_by: requester._id,
       reset_by_role: isSelf ? "self" : requester.role,
       timestamp: new Date(),
     };
 
-    // Keep last 19, add this — if you want similar logging
+    // Keep last 199, add this — if you want similar logging
     targetUser.password_reset_logs =
-      targetUser.password_reset_logs?.slice(-19) || [];
+      targetUser.password_reset_logs?.slice(-199) || [];
     targetUser.password_reset_logs.push(logEntry);
 
     await targetUser.save();

@@ -7,10 +7,17 @@ const adminUserSchema = new mongoose.Schema(
     password: { type: String, required: true }, // Hashed
     role: { type: String, enum: ["superadmin", "admin", "sales", "moderator"] },
     phone: { type: String },
+    avatar: { type: String, default: "" },
+    nameChangedAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
     tokenVersion: { type: Number, default: 0 },
     password_reset_logs: [
       {
+        action: {
+          type: String,
+          enum: ["password_change", "profile_update", "avatar_update"],
+          default: "password_change",
+        },
         reset_by: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "AdminUser",

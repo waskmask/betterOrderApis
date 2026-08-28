@@ -3,7 +3,8 @@ const passport = require("passport");
 const router = express.Router();
 const asyncHandler = require("../utils/asyncHandler");
 const adminAuthController = require("../controllers/adminAuthController");
-const { verifyToken, isSuperAdmin } = require("../middlewares/auth");
+const { verifyToken, isSuperAdmin, loggedInAdmin } = require("../middlewares/auth");
+const { authLoginLimiter, passwordChangeLimiter } = require("../middlewares/rateLimit");
 
 // Only SuperAdmin can register new admin users
 router.post(
@@ -14,7 +15,7 @@ router.post(
 );
 
 // Login is public
-router.post("/login", (req, res, next) => {
+router.post("/login", authLoginLimiter, (req, res, next) => {
   passport.authenticate("local", { session: false }, (err, user, info) => {
     if (err) return next(err);
 
@@ -32,6 +33,8 @@ router.post("/login", (req, res, next) => {
 router.post(
   "/change-password",
   verifyToken,
+  loggedInAdmin,
+  passwordChangeLimiter,
   asyncHandler(adminAuthController.changePassword)
 );
 

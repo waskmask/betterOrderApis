@@ -1,5 +1,6 @@
 const SuggestRestaurant = require("../modals/SuggestRestaurant");
 const asyncHandler = require("../utils/asyncHandler");
+const { buildDiacriticInsensitiveRegex } = require("../utils/searchNormalize");
 
 // @desc    Submit restaurant suggestion
 // @route   POST /api/suggest-restaurant
@@ -133,12 +134,15 @@ const getAllSuggestions = asyncHandler(async (req, res) => {
   }
 
   if (search) {
-    query.$or = [
-      { restaurantName: { $regex: search, $options: "i" } },
-      { "suggestedBy.name": { $regex: search, $options: "i" } },
-      { "suggestedBy.email": { $regex: search, $options: "i" } },
-      { "address.city": { $regex: search, $options: "i" } },
-    ];
+    const searchRegex = buildDiacriticInsensitiveRegex(search);
+    if (searchRegex) {
+      query.$or = [
+        { restaurantName: { $regex: searchRegex } },
+        { "suggestedBy.name": { $regex: searchRegex } },
+        { "suggestedBy.email": { $regex: searchRegex } },
+        { "address.city": { $regex: searchRegex } },
+      ];
+    }
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);

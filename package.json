@@ -4,7 +4,7 @@
   "description": "betterorder_node_api_backend",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/restaurantRoles.test.js tests/emailAvailability.test.js tests/phase4Enterprise.test.js"
   },
   "repository": {
     "type": "git",
@@ -21,18 +21,35 @@
   },
   "homepage": "https://github.com/waskmask/betterOrderApis#readme",
   "dependencies": {
-    "bcryptjs": "^3.0.2",
+    "@aws-sdk/client-s3": "^3.1114.0",
+    "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "firebase-admin": "^14.3.0",
+    "google-auth-library": "^10.9.1",
+    "jsonwebtoken": "^9.0.3",
     "moment-timezone": "^0.5.48",
-    "mongoose": "^8.13.1",
+    "mongoose": "^8.24.3",
     "multer": "^1.4.5-lts.2",
+    "nodemailer": "^9.0.5",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
-    "sharp": "^0.33.5",
-    "uuid": "^11.1.0"
+    "sharp": "^0.35.3",
+    "socket.io": "^4.8.3",
+    "uuid": "^11.1.1"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.6.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  },
+  "allowScripts": {
+    "sharp@0.35.3": true,
+    "@firebase/util@1.15.0": true,
+    "@firebase/util@1.15.3": true,
+    "protobufjs@7.6.5": true
   }
 }

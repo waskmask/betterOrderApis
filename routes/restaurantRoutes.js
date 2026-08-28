@@ -7,11 +7,15 @@ const {
   isAdminSuperadminOrSales,
   allAdminUsers,
   isAdminOrSuperAdmin,
+  isSuperAdmin,
   isRestaurantSelf,
   canManageMenuCategory,
+  canViewRestaurant,
+  canViewPlatformAudit,
+  canManageRestaurantStaffForRestaurant,
 } = require("../middlewares/auth");
 
-//create / add restaurant
+// create / add restaurant
 router.post(
   "/",
   verifyToken,
@@ -26,39 +30,33 @@ router.get(
   restaurantController.getAllRestaurants
 );
 
-// quick search
+// admin quick search
 router.get(
   "/quick-search",
-  verifyToken, // optional: remove if it's a public search
+  verifyToken,
   allAdminUsers,
   asyncHandler(restaurantController.quickSearchRestaurants)
 );
 
-// 📄 Get single
+// public customer discovery
 router.get(
-  "/:restaurantId",
-  verifyToken,
-  allAdminUsers,
-  restaurantController.getSingleRestaurant
+  "/discover",
+  asyncHandler(restaurantController.discoverRestaurants)
 );
 
-// 🔁 Toggle isActive (with log)
-router.patch(
-  "/:restaurantId/toggle-active",
-  verifyToken,
-  isAdminOrSuperAdmin,
-  restaurantController.toggleRestaurantStatus
-);
-
-// 🍽️ Get menu
+// public filter metadata for discovery UI
 router.get(
-  "/:restaurantId/menu",
-  verifyToken,
-  allAdminUsers,
-  restaurantController.getRestaurantMenu
+  "/discover/filters",
+  asyncHandler(restaurantController.getDiscoverFilters)
 );
 
-// me for restaurant itself
+// check username availability
+router.post(
+  "/check-username",
+  asyncHandler(restaurantController.checkUsernameAvailability)
+);
+
+// restaurant self
 router.get(
   "/me/self",
   verifyToken,
@@ -66,18 +64,24 @@ router.get(
   restaurantController.getSelfRestaurant
 );
 
-// update restaurant details
-router.patch(
-  "/:restaurantId",
-  verifyToken,
-  canManageMenuCategory,
-  asyncHandler(restaurantController.updateRestaurant)
+// public customer menu
+router.get(
+  "/public/:restaurantId/menu",
+  asyncHandler(restaurantController.getPublicRestaurantMenu)
 );
 
-// check username availability
+// public checkout guard
 router.post(
-  "/check-username",
-  asyncHandler(restaurantController.checkUsernameAvailability)
+  "/public/:restaurantId/checkout/validate",
+  asyncHandler(restaurantController.validatePublicCheckout)
+);
+
+// get menu
+router.get(
+  "/:restaurantId/menu",
+  verifyToken,
+  canViewRestaurant,
+  restaurantController.getRestaurantMenu
 );
 
 // change username
@@ -88,12 +92,86 @@ router.patch(
   asyncHandler(restaurantController.changeUsername)
 );
 
-// toggle visibility to show restaurant on app for customers to order food
+// toggle isActive
+router.patch(
+  "/:restaurantId/toggle-active",
+  verifyToken,
+  isAdminOrSuperAdmin,
+  restaurantController.toggleRestaurantStatus
+);
+
+router.get(
+  "/:restaurantId/deactivation-impact",
+  verifyToken,
+  isAdminOrSuperAdmin,
+  asyncHandler(restaurantController.getDeactivationImpact)
+);
+
+// toggle visibility — platform admin / superadmin only
 router.patch(
   "/:restaurantId/toggle-visibility",
   verifyToken,
   isAdminOrSuperAdmin,
   restaurantController.toggleRestaurantVisibility
+);
+
+router.get(
+  "/:restaurantId/publish-readiness",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantController.getPublishReadiness)
+);
+
+router.post(
+  "/:restaurantId/publish-request",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantController.requestRestaurantPublish)
+);
+
+router.patch(
+  "/:restaurantId/publish-request/review",
+  verifyToken,
+  isAdminOrSuperAdmin,
+  asyncHandler(restaurantController.reviewRestaurantPublish)
+);
+
+router.patch(
+  "/:restaurantId/modules",
+  verifyToken,
+  isAdminOrSuperAdmin,
+  asyncHandler(restaurantController.updateRestaurantModules)
+);
+
+// edit audit logs (cursor paginated) — before bare :restaurantId GET
+router.get(
+  "/:restaurantId/audit-logs/export",
+  verifyToken,
+  canViewPlatformAudit,
+  asyncHandler(restaurantController.exportRestaurantAuditLogs)
+);
+
+router.get(
+  "/:restaurantId/audit-logs",
+  verifyToken,
+  canViewPlatformAudit,
+  asyncHandler(restaurantController.getRestaurantAuditLogs)
+);
+
+// get single restaurant
+router.get(
+  "/:restaurantId",
+  verifyToken,
+  canViewRestaurant,
+  restaurantController.getSingleRestaurant
+);
+
+// update restaurant details
+router.patch(
+  "/:restaurantId",
+  verifyToken,
+  canManageMenuCategory,
+  asyncHandler(restaurantController.updateRestaurant)
 );
 
 module.exports = router;

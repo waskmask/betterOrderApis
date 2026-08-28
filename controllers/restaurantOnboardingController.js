@@ -1,5 +1,6 @@
 const RestaurantOnboarding = require("../modals/RestaurantOnboarding");
 const asyncHandler = require("../utils/asyncHandler");
+const { buildDiacriticInsensitiveRegex } = require("../utils/searchNormalize");
 
 // @desc    Submit restaurant onboarding request (Public)
 // @route   POST /api/restaurant-onboarding
@@ -161,13 +162,16 @@ const getAllOnboardings = asyncHandler(async (req, res) => {
   }
 
   if (search) {
-    query.$or = [
-      { restaurant_name: { $regex: search, $options: "i" } },
-      { contact_name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
-      { phoneNumber: { $regex: search, $options: "i" } },
-      { "address.city": { $regex: search, $options: "i" } },
-    ];
+    const searchRegex = buildDiacriticInsensitiveRegex(search);
+    if (searchRegex) {
+      query.$or = [
+        { restaurant_name: { $regex: searchRegex } },
+        { contact_name: { $regex: searchRegex } },
+        { email: { $regex: searchRegex } },
+        { phoneNumber: { $regex: searchRegex } },
+        { "address.city": { $regex: searchRegex } },
+      ];
+    }
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
