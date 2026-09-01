@@ -122,6 +122,7 @@ exports.agentHeartbeat = async (req, res) => {
       lastSeenAt: restaurant.printAgentLastSeenAt,
     });
   } catch (error) {
+    console.error("print_agent_heartbeat_error", error);
     return res.status(500).json({ success: false, message: "heartbeat_failed" });
   }
 };
@@ -288,7 +289,10 @@ exports.getOrderPrintPayload = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const payload = buildKitchenTicketPayload(order);
+    const restaurant = await Restaurant.findById(order.restaurant.restaurantId).select(
+      "images.logo restaurant_name phoneNumber email address vat_number"
+    );
+    const payload = await buildKitchenTicketPayload(order, restaurant);
     return res.json({ success: true, ...payload, orderNumber: order.orderNumber });
   } catch (error) {
     return res.status(500).json({ success: false, message: "print_payload_failed" });
@@ -308,7 +312,7 @@ exports.reprintOrder = async (req, res) => {
     }
 
     const restaurant = await Restaurant.findById(order.restaurant.restaurantId).select(
-      "orderSettings printerConfig printers"
+      "orderSettings printerConfig printers images.logo restaurant_name phoneNumber email address vat_number"
     );
     if (!restaurant) {
       return res.status(404).json({ message: "restaurant_not_found" });

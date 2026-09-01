@@ -66,6 +66,10 @@ router.get(
 
 // public customer menu
 router.get(
+  "/public/:restaurantId/menu/items/:itemId",
+  asyncHandler(restaurantController.getPublicRestaurantMenuItem)
+);
+router.get(
   "/public/:restaurantId/menu",
   asyncHandler(restaurantController.getPublicRestaurantMenu)
 );

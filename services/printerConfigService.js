@@ -378,6 +378,7 @@ module.exports = {
   normalizeConnection,
   normalizePrinterEntry,
   normalizeRestaurantPrinters,
+  normalizeDiscoveredPrinters,
   getEnabledPrinters,
   getDiscoveredEnabledPrinters,
   getPrintersForRole,

@@ -830,136 +830,171 @@ function mapPublicOpeningHours(openingHours) {
   ].map((day) => mapPublicHourRow(openingHours?.[day]));
 }
 
-function filterPublicMenu(menu, modules = {}) {
+function mapPublicI18n(value) {
+  return value && typeof value === "object" ? value : {};
+}
+
+function mapPublicMenuPrices(item) {
+  return (item?.price || [])
+    .filter(
+      (row) =>
+        row &&
+        row.item_size &&
+        row.item_price !== undefined &&
+        row.item_price !== null
+    )
+    .map((row) => ({
+      item_size: row.item_size,
+      sizeI18n: mapPublicI18n(row?.sizeI18n),
+      item_price: centsToEuroNumber(row.item_price),
+    }));
+}
+
+function mapPublicMenuItemCore(item, { lean = false, includeFoodInfo = false } = {}) {
+  const prices = mapPublicMenuPrices(item);
+  if (!prices.length) return null;
+
+  const cheapest = prices.reduce((lowest, row) =>
+    Number(row.item_price) < Number(lowest.item_price) ? row : lowest
+  );
+  const image = formatItemImageForPublic(item?.item_image, {
+    includeItem: !lean,
+  });
+
+  return {
+    _id: String(item?._id || ""),
+    item_name: item?.item_name || "",
+    item_desc: item?.item_desc || "",
+    nameI18n: mapPublicI18n(item?.nameI18n),
+    descriptionI18n: mapPublicI18n(item?.descriptionI18n),
+    item_image: lean
+      ? { thumbnail: image.thumbnail || "", aspect: image.aspect || "1:1" }
+      : image,
+    price: lean
+      ? [{ item_size: cheapest.item_size, item_price: cheapest.item_price }]
+      : prices,
+    ...(includeFoodInfo && !lean ? { food_info: item?.food_info || undefined } : {}),
+    highlight: Boolean(item?.highlight),
+  };
+}
+
+function mapPublicCategoryModifiers(category) {
+  const extras = (category?.extra_menu?.extras || [])
+    .filter((extra) => extra?.isActive !== false)
+    .map((extra) => ({
+      _id: extra?._id ? String(extra._id) : "",
+      label: extra?.label || "",
+      labelI18n: mapPublicI18n(extra?.labelI18n),
+      prices: (extra?.prices || [])
+        .filter(
+          (row) =>
+            row &&
+            row.price !== undefined &&
+            row.price !== null
+        )
+        .map((row) => ({
+          price: centsToEuroNumber(row.price),
+        })),
+    }))
+    .filter((extra) => extra.label && extra.prices.length > 0);
+
+  const dressing =
+    category?.dressing && category.dressing.isActive !== false
+      ? {
+          _id: category.dressing?._id
+            ? String(category.dressing._id)
+            : "",
+          dressing_label: category.dressing?.dressing_label || "",
+          labelI18n: mapPublicI18n(category.dressing?.labelI18n),
+          multiple: Boolean(category.dressing?.multiple),
+          options: (category.dressing?.options || [])
+            .filter((option) => option?.isActive !== false)
+            .map((option) => ({
+              _id: option?._id ? String(option._id) : "",
+              dressing_name: option?.dressing_name || "",
+              nameI18n: mapPublicI18n(option?.nameI18n),
+            }))
+            .filter((option) => option.dressing_name),
+        }
+      : null;
+
+  const addons = (category?.addons || [])
+    .filter((addon) => addon?.isActive !== false)
+    .map((addon) => ({
+      _id: addon?._id ? String(addon._id) : "",
+      addon_label: addon?.addon_label || "",
+      labelI18n: mapPublicI18n(addon?.labelI18n),
+      optional: Boolean(addon?.optional),
+      multiple: Boolean(addon?.multiple),
+      minSelect: Number(addon?.minSelect) || 0,
+      maxSelect: Number(addon?.maxSelect) || 0,
+      applyToAll: Boolean(addon?.applyToAll),
+      appliesTo: (addon?.appliesTo || []).map((id) => String(id)),
+      options: (addon?.options || [])
+        .filter((option) => option?.isActive !== false)
+        .map((option) => ({
+          _id: option?._id ? String(option._id) : "",
+          addon_name: option?.addon_name || "",
+          nameI18n: mapPublicI18n(option?.nameI18n),
+          addon_price: centsToEuroNumber(option?.addon_price || 0),
+        }))
+        .filter((option) => option.addon_name),
+    }))
+    .filter((addon) => addon.addon_label && addon.options.length > 0);
+
+  return {
+    extras,
+    dressing:
+      dressing && dressing.options.length > 0 && dressing.dressing_label
+        ? dressing
+        : null,
+    addons,
+  };
+}
+
+function findPublicMenuItem(menu, itemId) {
+  const target = String(itemId || "");
+  if (!target) return null;
+
+  for (const category of menu || []) {
+    if (category?.isActive === false) continue;
+    for (const item of category?.items || []) {
+      if (item?.isActive === false) continue;
+      if (String(item?._id || "") === target) {
+        return { category, item };
+      }
+    }
+  }
+
+  return null;
+}
+
+function filterPublicMenu(menu, modules = {}, { lean = false } = {}) {
   const includeFoodInfo = modules.foodInfo !== false;
   return (menu || [])
     .filter((category) => category?.isActive !== false)
     .map((category) => {
       const items = (category?.items || [])
         .filter((item) => item?.isActive !== false)
-        .map((item) => ({
-          _id: String(item?._id || ""),
-          item_name: item?.item_name || "",
-          item_desc: item?.item_desc || "",
-          nameI18n:
-            item?.nameI18n && typeof item.nameI18n === "object" ? item.nameI18n : {},
-          descriptionI18n:
-            item?.descriptionI18n && typeof item.descriptionI18n === "object"
-              ? item.descriptionI18n
-              : {},
-          item_image: formatItemImageForPublic(item?.item_image),
-          price: (item?.price || [])
-            .filter(
-              (row) =>
-                row &&
-                row.item_size &&
-                row.item_price !== undefined &&
-                row.item_price !== null
-            )
-            .map((row) => ({
-              item_size: row.item_size,
-              sizeI18n:
-                row?.sizeI18n && typeof row.sizeI18n === "object" ? row.sizeI18n : {},
-              item_price: centsToEuroNumber(row.item_price),
-            })),
-          ...(includeFoodInfo ? { food_info: item?.food_info || undefined } : {}),
-          highlight: Boolean(item?.highlight),
-        }))
-        .filter((item) => item.price.length > 0);
+        .map((item) => mapPublicMenuItemCore(item, { lean, includeFoodInfo }))
+        .filter(Boolean);
 
-      const extras = (category?.extra_menu?.extras || [])
-        .filter((extra) => extra?.isActive !== false)
-        .map((extra) => ({
-          _id: extra?._id ? String(extra._id) : "",
-          label: extra?.label || "",
-          labelI18n:
-            extra?.labelI18n && typeof extra.labelI18n === "object"
-              ? extra.labelI18n
-              : {},
-          prices: (extra?.prices || [])
-            .filter(
-              (row) =>
-                row &&
-                row.price !== undefined &&
-                row.price !== null
-            )
-            .map((row) => ({
-              price: centsToEuroNumber(row.price),
-            })),
-        }))
-        .filter((extra) => extra.label && extra.prices.length > 0);
-
-      const dressing =
-        category?.dressing && category.dressing.isActive !== false
-          ? {
-              _id: category.dressing?._id
-                ? String(category.dressing._id)
-                : "",
-              dressing_label: category.dressing?.dressing_label || "",
-              labelI18n:
-                category.dressing?.labelI18n &&
-                typeof category.dressing.labelI18n === "object"
-                  ? category.dressing.labelI18n
-                  : {},
-              multiple: Boolean(category.dressing?.multiple),
-              options: (category.dressing?.options || [])
-                .filter((option) => option?.isActive !== false)
-                .map((option) => ({
-                  _id: option?._id ? String(option._id) : "",
-                  dressing_name: option?.dressing_name || "",
-                  nameI18n:
-                    option?.nameI18n && typeof option.nameI18n === "object"
-                      ? option.nameI18n
-                      : {},
-                }))
-                .filter((option) => option.dressing_name),
-            }
-          : null;
-
-      const addons = (category?.addons || [])
-        .filter((addon) => addon?.isActive !== false)
-        .map((addon) => ({
-          _id: addon?._id ? String(addon._id) : "",
-          addon_label: addon?.addon_label || "",
-          labelI18n:
-            addon?.labelI18n && typeof addon.labelI18n === "object"
-              ? addon.labelI18n
-              : {},
-          optional: Boolean(addon?.optional),
-          multiple: Boolean(addon?.multiple),
-          minSelect: Number(addon?.minSelect) || 0,
-          maxSelect: Number(addon?.maxSelect) || 0,
-          applyToAll: Boolean(addon?.applyToAll),
-          appliesTo: (addon?.appliesTo || []).map((id) => String(id)),
-          options: (addon?.options || [])
-            .filter((option) => option?.isActive !== false)
-            .map((option) => ({
-              _id: option?._id ? String(option._id) : "",
-              addon_name: option?.addon_name || "",
-              nameI18n:
-                option?.nameI18n && typeof option.nameI18n === "object"
-                  ? option.nameI18n
-                  : {},
-              addon_price: centsToEuroNumber(option?.addon_price || 0),
-            }))
-            .filter((option) => option.addon_name),
-        }))
-        .filter((addon) => addon.addon_label && addon.options.length > 0);
-
-      return {
+      const mapped = {
         _id: String(category?._id || ""),
         category_name: category?.category_name || "",
         category_desc: category?.category_desc || "",
         category_image: category?.category_image || "",
         count_of_prices: Number(category?.count_of_prices || 1),
         items,
-        extra_menu: {
-          extras,
-        },
-        dressing:
-          dressing && dressing.options.length > 0 && dressing.dressing_label
-            ? dressing
-            : null,
+      };
+
+      if (lean) return mapped;
+
+      const { extras, dressing, addons } = mapPublicCategoryModifiers(category);
+      return {
+        ...mapped,
+        extra_menu: { extras },
+        dressing,
         addons,
       };
     })
@@ -1800,7 +1835,7 @@ exports.getPublicRestaurantMenu = async (req, res) => {
 
   const appModules = await getAppModuleConfig();
   const modules = effectiveRestaurantModules(restaurant, appModules);
-  const menu = filterPublicMenu(restaurant.menu, modules);
+  const menu = filterPublicMenu(restaurant.menu, modules, { lean: true });
 
   if (!menu.length) {
     return res.status(404).json({
@@ -1894,6 +1929,58 @@ exports.getPublicRestaurantMenu = async (req, res) => {
         : [],
     },
     menu,
+  });
+};
+
+exports.getPublicRestaurantMenuItem = async (req, res) => {
+  const { restaurantId, itemId } = req.params;
+  const restaurant = await Restaurant.findOne({
+    ...getPublicRestaurantLookup(restaurantId),
+    isActive: true,
+    visibility: true,
+  })
+    .select("menu modules")
+    .lean();
+
+  if (!restaurant) {
+    return res.status(404).json({
+      success: false,
+      message: "restaurant_not_found",
+    });
+  }
+
+  const found = findPublicMenuItem(restaurant.menu, itemId);
+  if (!found) {
+    return res.status(404).json({
+      success: false,
+      message: "menu_item_not_found",
+    });
+  }
+
+  const appModules = await getAppModuleConfig();
+  const modules = effectiveRestaurantModules(restaurant, appModules);
+  const includeFoodInfo = modules.foodInfo !== false;
+  const item = mapPublicMenuItemCore(found.item, { lean: false, includeFoodInfo });
+
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      message: "menu_item_not_found",
+    });
+  }
+
+  const { extras, dressing, addons } = mapPublicCategoryModifiers(found.category);
+
+  res.status(200).json({
+    success: true,
+    item,
+    category: {
+      _id: String(found.category?._id || ""),
+      category_name: found.category?.category_name || "",
+      extra_menu: { extras },
+      dressing,
+      addons,
+    },
   });
 };
 

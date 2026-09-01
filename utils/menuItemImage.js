@@ -24,26 +24,28 @@ function isPlainObject(value) {
 
 /**
  * Normalize legacy string paths and new variant objects.
- * @returns {{ master?: string, item?: string, thumbnail?: string } | null}
+ * @returns {{ master?: string, item?: string, thumbnail?: string, aspect?: "1:1" | "4:3" } | null}
  */
 function normalizeItemImage(value) {
   if (!value) return null;
   if (typeof value === "string") {
     const pathValue = value.trim();
     if (!pathValue) return null;
-    return { master: pathValue, item: pathValue, thumbnail: pathValue };
+    return { master: pathValue, item: pathValue, thumbnail: pathValue, aspect: "1:1" };
   }
   if (!isPlainObject(value)) return null;
 
   const master = typeof value.master === "string" ? value.master.trim() : "";
   const item = typeof value.item === "string" ? value.item.trim() : "";
   const thumbnail = typeof value.thumbnail === "string" ? value.thumbnail.trim() : "";
+  const aspect = value.aspect === "4:3" ? "4:3" : "1:1";
 
   if (!master && !item && !thumbnail) return null;
   return {
     master: master || item || thumbnail || undefined,
     item: item || master || thumbnail || undefined,
     thumbnail: thumbnail || item || master || undefined,
+    aspect,
   };
 }
 
@@ -56,14 +58,20 @@ function pickItemImageVariant(value, variant = "thumbnail") {
 }
 
 /** Public storefront payload: never expose master. */
-function formatItemImageForPublic(value) {
+function formatItemImageForPublic(value, { includeItem = true } = {}) {
   const normalized = normalizeItemImage(value);
+  const thumbnail = normalized?.thumbnail || "";
+  const aspect = normalized?.aspect === "4:3" ? "4:3" : "1:1";
+  if (!includeItem) {
+    return { thumbnail, aspect };
+  }
   if (!normalized) {
-    return { thumbnail: "", item: "" };
+    return { thumbnail: "", item: "", aspect };
   }
   return {
-    thumbnail: normalized.thumbnail || "",
+    thumbnail,
     item: normalized.item || normalized.thumbnail || "",
+    aspect,
   };
 }
 
@@ -75,6 +83,7 @@ function formatItemImageForAdmin(value) {
     master: normalized.master || "",
     item: normalized.item || "",
     thumbnail: normalized.thumbnail || "",
+    aspect: normalized.aspect === "4:3" ? "4:3" : "1:1",
   };
 }
 
@@ -139,7 +148,18 @@ async function buildItemBuffer(masterBuffer) {
     .toBuffer();
 }
 
-async function buildThumbnailBuffer(masterBuffer) {
+async function buildThumbnailBuffer(masterBuffer, aspect) {
+  if (aspect === "4:3") {
+    const height = Math.round((THUMB_SIZE * 3) / 4);
+    return sharp(masterBuffer)
+      .resize(THUMB_SIZE, height, {
+        fit: "cover",
+        position: "centre",
+      })
+      .webp({ quality: THUMB_QUALITY })
+      .toBuffer();
+  }
+
   return sharp(masterBuffer)
     .resize(THUMB_SIZE, THUMB_SIZE, {
       fit: "cover",
@@ -166,7 +186,7 @@ async function createMenuItemImageVariants(inputBuffer) {
   const masterBuffer = await buildMasterBuffer(inputBuffer, aspect);
   const [itemBuffer, thumbnailBuffer] = await Promise.all([
     buildItemBuffer(masterBuffer),
-    buildThumbnailBuffer(masterBuffer),
+    buildThumbnailBuffer(masterBuffer, aspect),
   ]);
 
   const paths = {
@@ -211,6 +231,7 @@ function processMenuItemImage() {
         master: variants.master,
         item: variants.item,
         thumbnail: variants.thumbnail,
+        aspect: variants.aspect === "4:3" ? "4:3" : "1:1",
       };
       // Legacy single-path field (prefer thumbnail for list-friendly default)
       req.itemImagePath = variants.thumbnail;

@@ -6,7 +6,7 @@ const connectDB = require("./config/db");
 const { startOrderExpiryService } = require("./services/orderExpiryService");
 const { startOutboxWorker } = require("./services/outboxService");
 const { startScheduledReleaseService } = require("./services/orderReleaseService");
-const { initOrderRealtimeRedis } = require("./services/orderRealtimeService");
+const { initOrderRealtimeRedis, shutdownOrderRealtimeRedis } = require("./services/orderRealtimeService");
 const opsMonitoringController = require("./controllers/opsMonitoringController");
 const passport = require("./utils/passport");
 const errorHandler = require("./middlewares/errorHandler");
@@ -166,5 +166,18 @@ const startServer = async () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
 };
+
+async function gracefulShutdown(signal) {
+  console.log(`${signal} received — shutting down`);
+  try {
+    await shutdownOrderRealtimeRedis();
+  } catch (error) {
+    console.warn("redis shutdown:", error.message);
+  }
+  process.exit(0);
+}
+
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
 
 startServer();

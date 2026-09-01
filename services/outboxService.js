@@ -46,7 +46,7 @@ async function processOutboxEvent(event) {
       return;
     }
     const restaurant = await Restaurant.findById(order.restaurant.restaurantId).select(
-      "orderSettings printerConfig"
+      "orderSettings printerConfig printers images.logo restaurant_name phoneNumber email address vat_number"
     );
     if (!restaurant) return;
     const source = event.payload?.source || "accept";
