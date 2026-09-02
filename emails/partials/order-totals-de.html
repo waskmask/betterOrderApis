@@ -1,0 +1,13 @@
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:12px 0;font-size:14px;color:#484848;">
+  <tr><td style="padding:4px 0;">Zwischensumme</td><td align="right" style="padding:4px 0;">{{subtotal}}</td></tr>
+  {{#if deliveryFee}}
+  <tr><td style="padding:4px 0;">Lieferung</td><td align="right" style="padding:4px 0;">{{deliveryFee}}</td></tr>
+  {{/if}}
+  {{#if discount}}
+  <tr><td style="padding:4px 0;">Rabatt</td><td align="right" style="padding:4px 0;">{{discount}}</td></tr>
+  {{/if}}
+  {{#if tip}}
+  <tr><td style="padding:4px 0;">Trinkgeld</td><td align="right" style="padding:4px 0;">{{tip}}</td></tr>
+  {{/if}}
+  <tr><td style="padding:8px 0;font-weight:700;border-top:1px solid #ebebeb;">Gesamt</td><td align="right" style="padding:8px 0;font-weight:700;border-top:1px solid #ebebeb;">{{orderTotal}}</td></tr>
+</table>

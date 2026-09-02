@@ -2,6 +2,7 @@ const Order = require("../modals/Order");
 const { Restaurant } = require("../modals/Restaurant");
 const { broadcastOrderEvent } = require("./orderRealtimeService");
 const { enqueueOutboxEvent } = require("./outboxService");
+const { enqueueOrderAcceptedEmail } = require("./email/orderEmailTriggers");
 const { isPrintEligible, isKitchenReleased } = require("./orderScheduleService");
 const {
   canAcceptOrReject,
@@ -182,6 +183,12 @@ async function performAcceptOrder({
     printDeferred: !isPrintEligible(order),
     printJobId,
   });
+
+  if (acceptedVia !== "auto") {
+    void enqueueOrderAcceptedEmail(order).catch((error) => {
+      console.warn("[order] accept email failed:", error.message);
+    });
+  }
 
   return { ok: true, order, printJob: printJobId ? { _id: printJobId } : null };
 }

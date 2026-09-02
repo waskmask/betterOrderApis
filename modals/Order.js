@@ -95,6 +95,7 @@ const orderSchema = new mongoose.Schema(
       lastName: { type: String, default: "" },
       email: { type: String, default: "" },
       phone: { type: String, default: "" },
+      locale: { type: String, enum: ["en", "de"], default: "en" },
     },
     fulfillment: {
       mode: { type: String, enum: ["delivery", "takeaway", "dine_in"], required: true },
@@ -174,6 +175,14 @@ const orderSchema = new mongoose.Schema(
     expiredAt: { type: Date, default: null },
     expiredFromStatus: { type: String, default: null },
     acceptedVia: { type: String, enum: ["manual", "auto", null], default: null },
+    reviewInviteTokenHash: { type: String, default: null, index: true },
+    reviewInviteExpiresAt: { type: Date, default: null },
+    reviewSubmittedAt: { type: Date, default: null },
+    reviewId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RestaurantReview",
+      default: null,
+    },
   },
   { timestamps: true }
 );

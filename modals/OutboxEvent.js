@@ -4,7 +4,7 @@ const outboxEventSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["print.enqueue", "push.restaurant", "customer.notify", "sse.broadcast"],
+      enum: ["print.enqueue", "push.restaurant", "customer.notify", "email.send", "sse.broadcast"],
       required: true,
       index: true,
     },

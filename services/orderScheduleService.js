@@ -1,5 +1,5 @@
 const DEFAULT_RELEASE_LEAD_MINUTES = 45;
-const MIN_SCHEDULE_LEAD_MINUTES = 60;
+const MIN_SCHEDULE_LEAD_MINUTES = 15;
 const MAX_SCHEDULE_LEAD_DAYS = 7;
 
 function parseRequestedFor(value) {
@@ -9,30 +9,41 @@ function parseRequestedFor(value) {
   return date;
 }
 
+function parseClockToday(value) {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
+  if (hours > 23 || minutes > 59) return null;
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
 function resolveScheduleFields(payload = {}) {
   const explicitType = String(payload.fulfillmentType || "").trim().toLowerCase();
   const requestedFor = parseRequestedFor(payload.requestedFor || payload.scheduledFor);
-  const rawTime = String(payload.deliveryTime || "asap").trim().toLowerCase();
+  const rawTime = String(payload.deliveryTime || "").trim();
+  const clockToday = parseClockToday(rawTime);
+  const isoTime = /^\d{4}-\d{2}-\d{2}/.test(rawTime) ? parseRequestedFor(rawTime) : null;
 
   const wantsScheduled =
     explicitType === "scheduled" ||
     Boolean(requestedFor) ||
-    (rawTime && rawTime !== "asap" && /^\d{4}-\d{2}-\d{2}/.test(rawTime));
+    Boolean(clockToday) ||
+    Boolean(isoTime);
 
   if (!wantsScheduled) {
     return {
       fulfillmentType: "asap",
-      requestedTime: rawTime || "asap",
+      requestedTime: "asap",
       requestedFor: null,
       releaseAt: null,
       kitchenReleasedAt: new Date(),
     };
   }
 
-  let scheduledAt = requestedFor;
-  if (!scheduledAt && /^\d{4}-\d{2}-\d{2}/.test(rawTime)) {
-    scheduledAt = parseRequestedFor(rawTime);
-  }
+  const scheduledAt = requestedFor || isoTime || clockToday;
 
   if (!scheduledAt) {
     const error = new Error("scheduled_time_required");
@@ -93,6 +104,7 @@ module.exports = {
   MIN_SCHEDULE_LEAD_MINUTES,
   MAX_SCHEDULE_LEAD_DAYS,
   parseRequestedFor,
+  parseClockToday,
   resolveScheduleFields,
   isKitchenReleased,
   isPrintEligible,

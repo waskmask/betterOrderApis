@@ -20,6 +20,7 @@ const restaurantAuthRoutes = require("./routes/restaurantAuthRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const restaurantMenuRoutes = require("./routes/restaurantMenuRoutes");
 const restaurantProfileRoutes = require("./routes/restaurantProfileRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const suggestRestaurantRoutes = require("./routes/suggestRestaurantRoutes");
 const restaurantOnboardingRoutes = require("./routes/restaurantOnboardingRoutes");
@@ -119,6 +120,7 @@ app.use("/api/restaurant-profile", restaurantProfileRoutes);
 app.use("/api/app-users", appUserRoutes);
 app.use("/api/food-info", foodInfoRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/reviews", reviewRoutes);
 app.use("/api/print", printRoutes);
 app.get("/api/ops/monitoring", require("./middlewares/auth").verifyToken, opsMonitoringController.getOpsMonitoring);
 app.use("/api/mobile", mobileRoutes);
@@ -129,6 +131,9 @@ app.use("/api/contact", contactRoutes);
 app.use("/api/suggest-restaurant", suggestRestaurantRoutes);
 app.use("/api/restaurant-onboarding", restaurantOnboardingRoutes);
 app.use("/api/restaurant-staff", restaurantStaffRoutes);
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/dev", require("./routes/devRoutes"));
+}
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });

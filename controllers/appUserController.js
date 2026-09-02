@@ -9,11 +9,25 @@ const generateToken = require("../utils/generateToken");
 const { sendAppUserEmail } = require("../utils/appUserMailer");
 const { resolveRequestLanguage } = require("../utils/appUserLocale");
 const { pickItemImageVariant } = require("../utils/menuItemImage");
+const {
+  issueVerificationEmail,
+  issuePasswordResetEmail,
+  sendAuthEmail,
+} = require("../services/auth/authEmailService");
+const {
+  createVerificationToken,
+  createPasswordResetToken,
+  hashToken,
+  timingSafeEqualToken,
+  EMAIL_VERIFICATION_TTL_MS,
+  PASSWORD_RESET_TTL_MS,
+  buildVerificationUrl,
+  buildPasswordResetUrl,
+} = require("../services/auth/authTokenService");
+const { anonymizeReviewsForAppUser } = require("../services/reviewService");
 
 const APP_USER_COOKIE_NAME = "bo_app_token";
 const APP_USER_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-const EMAIL_VERIFICATION_TTL_MS = 1000 * 60 * 60;
-const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 const RESEND_WINDOW_MS = 1000 * 60;
 const TERMS_VERSION = process.env.APP_USER_TERMS_VERSION || "2026-04-29";
 const PRIVACY_VERSION = process.env.APP_USER_PRIVACY_VERSION || "2026-04-29";
@@ -112,42 +126,8 @@ function getMarketingEmailOptIn(body) {
   return Boolean(body?.marketingEmailOptIn || consent.marketingEmailOptIn);
 }
 
-function createVerificationToken() {
-  const raw = crypto.randomBytes(32).toString("hex");
-  const hash = crypto.createHash("sha256").update(raw).digest("hex");
-  return {
-    raw,
-    hash,
-    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
-  };
-}
-
-function createPasswordResetToken() {
-  const raw = crypto.randomBytes(32).toString("hex");
-  const hash = crypto.createHash("sha256").update(raw).digest("hex");
-  return {
-    raw,
-    hash,
-    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
-  };
-}
-
-function buildVerificationUrl(rawToken) {
-  const baseUrl =
-    process.env.APP_USER_EMAIL_VERIFICATION_URL ||
-    process.env.CUSTOMER_APP_URL ||
-    "http://localhost:4003/verify-email";
-  const separator = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${separator}token=${rawToken}`;
-}
-
-function buildPasswordResetUrl(rawToken) {
-  const baseUrl =
-    process.env.APP_USER_PASSWORD_RESET_URL ||
-    process.env.CUSTOMER_APP_URL ||
-    "http://localhost:4003/reset-password";
-  const separator = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${separator}token=${rawToken}`;
+async function sendLifecycleEmail({ appUser, type, actionUrl = null }) {
+  return sendAuthEmail({ appUser, template: type, actionUrl });
 }
 
 function setAppUserCookie(res, token) {
@@ -238,89 +218,6 @@ function validateAddressInput(input, isPartial = false) {
   }
 
   return next;
-}
-
-async function issueVerificationEmail(appUser) {
-  const lang = appUser.preferredLanguage || "en";
-  const token = createVerificationToken();
-  appUser.emailVerificationTokenHash = token.hash;
-  appUser.emailVerificationTokenExpiresAt = token.expiresAt;
-  appUser.verificationEmailLastSentAt = new Date();
-  await appUser.save();
-
-  const verificationUrl = buildVerificationUrl(token.raw);
-  const emailResult = await sendAppUserEmail({
-    to: appUser.email,
-    lang,
-    type: "verifyEmail",
-    name: appUser.name,
-    actionUrl: verificationUrl,
-  });
-
-  const preview =
-    process.env.NODE_ENV !== "production" || !emailResult.sent
-      ? {
-          verificationUrl,
-          verificationToken: token.raw,
-          delivery: emailResult.sent ? "smtp" : emailResult.reason,
-        }
-      : null;
-
-  return {
-    emailResult,
-    preview,
-    expiresAt: token.expiresAt,
-    expiresInSeconds: Math.floor(EMAIL_VERIFICATION_TTL_MS / 1000),
-  };
-}
-
-async function sendLifecycleEmail({ appUser, type, actionUrl = null }) {
-  const lang = appUser.preferredLanguage || "en";
-  const emailResult = await sendAppUserEmail({
-    to: appUser.email,
-    lang,
-    type,
-    name: appUser.name,
-    actionUrl,
-  });
-
-  const preview =
-    process.env.NODE_ENV !== "production" || !emailResult.sent
-      ? {
-          delivery: emailResult.sent ? "smtp" : emailResult.reason,
-          actionUrl,
-          type,
-          lang,
-        }
-      : null;
-
-  return { emailResult, preview };
-}
-
-async function issuePasswordResetEmail(appUser) {
-  const token = createPasswordResetToken();
-  appUser.passwordResetTokenHash = token.hash;
-  appUser.passwordResetTokenExpiresAt = token.expiresAt;
-  appUser.passwordResetLastSentAt = new Date();
-  await appUser.save();
-
-  const resetUrl = buildPasswordResetUrl(token.raw);
-  const email = await sendLifecycleEmail({
-    appUser,
-    type: "forgotPassword",
-    actionUrl: resetUrl,
-  });
-
-  const preview =
-    process.env.NODE_ENV !== "production" || !email.emailResult.sent
-      ? {
-          resetUrl,
-          resetToken: token.raw,
-          delivery: email.emailResult.sent ? "smtp" : email.emailResult.reason,
-        }
-      : null;
-
-  return { emailResult: email.emailResult, preview };
 }
 
 async function findFavoriteMenuItem(restaurantId, itemId) {
@@ -858,6 +755,7 @@ exports.deleteMe = async (req, res, next) => {
     user.tokenVersion += 1;
     user.deletedAt = new Date();
     user.anonymizedAt = new Date();
+    await anonymizeReviewsForAppUser(user._id);
     await user.save();
     clearAppUserCookie(res);
 

@@ -104,6 +104,13 @@ const passwordChangeLimiter = createRateLimiter({
   keyGenerator: (req) => `${getClientIp(req)}:${req.user?._id || ""}`,
 });
 
+const reviewSubmitLimiter = createRateLimiter({
+  keyPrefix: "review-submit",
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keyGenerator: tokenOrIp,
+});
+
 module.exports = {
   authGoogleLimiter,
   authLoginLimiter,
@@ -111,4 +118,5 @@ module.exports = {
   emailSendLimiter,
   passwordChangeLimiter,
   tokenActionLimiter,
+  reviewSubmitLimiter,
 };

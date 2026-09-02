@@ -5,6 +5,7 @@ const { enqueuePrintJob } = require("./orderPrintService");
 const { sendRestaurantOrderPushSafe } = require("./mobilePushService");
 const { broadcastOrderEventLocal } = require("./orderRealtimeService");
 const { isPrintEligible } = require("./orderScheduleService");
+const { sendTransactionalEmail } = require("./email/transactionalEmailService");
 
 let intervalHandle = null;
 
@@ -79,9 +80,33 @@ async function processOutboxEvent(event) {
   }
 
   if (event.type === "customer.notify") {
-    console.info(
-      `[outbox] customer.notify stub order=${event.orderId} channel=${event.payload?.channel || "none"}`
-    );
+    const channel = event.payload?.channel || "";
+    if (channel === "refund" && event.orderId) {
+      const { enqueueOrderRefundEmail } = require("./email/orderEmailTriggers");
+      const order = await Order.findById(event.orderId);
+      if (order) await enqueueOrderRefundEmail(order);
+    }
+    return;
+  }
+
+  if (event.type === "email.send") {
+    const { template, lang, to, data, correlation = {} } = event.payload || {};
+    if (!template || !to) {
+      throw new Error("email_send_missing_fields");
+    }
+    await sendTransactionalEmail({
+      to,
+      lang: lang || "en",
+      template,
+      data: data || {},
+      correlation: {
+        orderId: correlation.orderId || event.orderId,
+        restaurantId: correlation.restaurantId || event.restaurantId,
+        appUserId: correlation.appUserId || null,
+      },
+      outboxEventId: event._id,
+    });
+    return;
   }
 }
 

@@ -392,6 +392,8 @@ const restaurantSchema = new mongoose.Schema(
       autoAcceptTakeawayMinutes: { type: Number, default: 30, min: 15, max: 120 },
       autoPrintOnAccept: { type: Boolean, default: true },
       autoDetectPrinters: { type: Boolean, default: true },
+      emailNotifications: { type: Boolean, default: true },
+      orderNotificationEmail: { type: String, default: "" },
       printRolesOnAccept: {
         type: [String],
         default: () => ["KITCHEN"],
@@ -442,6 +444,11 @@ const restaurantSchema = new mongoose.Schema(
     },
     printAgentTokenHash: { type: String, default: "" },
     printAgentLastSeenAt: { type: Date, default: null },
+    reviewSummary: {
+      averageRating: { type: Number, default: 0 },
+      reviewCount: { type: Number, default: 0 },
+      lastReviewAt: { type: Date, default: null },
+    },
     printAgentPairingCodeHash: { type: String, default: "" },
     printAgentPairingExpiresAt: { type: Date, default: null },
     printAgentDiscoveredPrinters: {

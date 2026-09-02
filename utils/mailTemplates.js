@@ -1,5 +1,5 @@
-const fs = require("fs/promises");
-const path = require("path");
+const { renderEmail } = require("../services/email/renderEmail");
+const { resolveTemplateKey } = require("../services/email/emailTemplateRegistry");
 const { getPlatformSettings } = require("../services/platformSettingsService");
 
 const SUPPORTED = ["en", "de"];
@@ -181,23 +181,15 @@ async function renderTemplate(templateBaseName, lang, data = {}) {
 }
 
 async function renderAppUserEmail({ type, lang = "en", name, actionUrl }) {
-  const resolvedLang = pickLang(lang);
-  const templateBaseName = templateBaseNames[type] || "verify-email";
-  const brandName = await resolveBrandName();
-  const subjectTemplate =
-    subjects[type]?.[resolvedLang] || subjects[type]?.en || "{{brandName}}";
-  const subject = interpolate(subjectTemplate, { brandName });
-  const html = await renderTemplate(templateBaseName, resolvedLang, {
-    name: name || (resolvedLang === "de" ? "du" : "there"),
-    actionUrl,
-    brandName,
+  const templateKey = resolveTemplateKey(type);
+  return renderEmail({
+    template: templateKey,
+    lang,
+    data: {
+      name: name || (pickLang(lang) === "de" ? "du" : "there"),
+      actionUrl,
+    },
   });
-
-  return {
-    subject,
-    html,
-    text: htmlToText(html),
-  };
 }
 
 module.exports = {

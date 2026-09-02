@@ -38,6 +38,13 @@ test("scheduled time too soon is rejected", () => {
   );
 });
 
+test("iso deliveryTime is treated as scheduled", () => {
+  const requestedFor = new Date(Date.now() + 90 * 60 * 1000).toISOString();
+  const fields = resolveScheduleFields({ deliveryTime: requestedFor });
+  assert.equal(fields.fulfillmentType, "scheduled");
+  assert.ok(fields.requestedFor);
+});
+
 test("paid orders skip auto-cancel and get refund_pending on reject", () => {
   const paid = { payment: { status: "paid" } };
   assert.equal(isAutoCancelEligible(paid), false);

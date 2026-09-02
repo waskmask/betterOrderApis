@@ -31,8 +31,15 @@ const {
   normalizeAcceptMinutes,
 } = require("../services/orderAcceptService");
 const { resolveScheduleFields } = require("../services/orderScheduleService");
+const { ensureCheckoutAppUser } = require("../services/checkoutAccountService");
 const { buildRefundUpdate } = require("../services/paymentRefundService");
 const { enqueueOutboxEvent } = require("../services/outboxService");
+const { resolveEmailLang } = require("../utils/resolveEmailLang");
+const { issueReviewInvite } = require("../services/reviewService");
+const {
+  enqueueOrderPlacedEmails,
+  enqueueOrderRejectedEmail,
+} = require("../services/email/orderEmailTriggers");
 const {
   resolvePendingExpiresAt,
   getEffectiveOrderStatus,
@@ -245,6 +252,13 @@ function serializePublicOrder(order) {
     restaurant: {
       nameSnapshot: doc.restaurant?.nameSnapshot || "",
       phoneSnapshot: doc.restaurant?.phoneSnapshot || "",
+      addressSnapshot: doc.restaurant?.addressSnapshot || null,
+    },
+    customer: {
+      firstName: doc.customer?.firstName || "",
+      lastName: doc.customer?.lastName || "",
+      email: doc.customer?.email || "",
+      phone: doc.customer?.phone || "",
     },
     fulfillment: doc.fulfillment,
     payment: doc.payment,
@@ -356,6 +370,10 @@ function buildOrderDocument(payload, priced, orderNumber, appUser = null) {
   ).slice(0, 160);
 
   const schedule = resolveScheduleFields(payload);
+  const customerLocale = resolveEmailLang({
+    explicit: payload?.lang || customer.locale,
+    appUser,
+  });
 
   return {
     orderNumber,
@@ -381,6 +399,7 @@ function buildOrderDocument(payload, priced, orderNumber, appUser = null) {
       lastName: String(customer.lastName || "").trim().slice(0, 80),
       email: customerEmail,
       phone: String(customer.phone || "").trim().slice(0, 60),
+      locale: customerLocale,
     },
     fulfillment: {
       mode: priced.mode,
@@ -433,8 +452,25 @@ exports.createOrder = async (req, res) => {
       }
     }
 
+    const payload = req.body || {};
+    const paymentMethod = normalizePaymentMethod(
+      payload.paymentMethod,
+      priced.restaurant.payment_methods || ["cod"]
+    );
+    if (!(priced.restaurant.payment_methods || ["cod"]).includes(paymentMethod)) {
+      throw new OrderValidationError("payment_method_unavailable", "Payment method unavailable");
+    }
+    resolveScheduleFields(payload);
+    const { appUser, session } = await ensureCheckoutAppUser({
+      req,
+      res,
+      payload,
+      paymentMethod,
+      existingUser: req.user,
+    });
+
     const orderNumber = await generateOrderNumber();
-    const orderDoc = buildOrderDocument(req.body || {}, priced, orderNumber, req.user);
+    const orderDoc = buildOrderDocument(payload, priced, orderNumber, appUser);
     orderDoc.pendingExpiresAt = resolvePendingExpiresAt(orderDoc.fulfillment);
     const order = await Order.create(orderDoc);
     const autoAcceptedOrder = await tryAutoAcceptOnCreate(order);
@@ -447,10 +483,19 @@ exports.createOrder = async (req, res) => {
     });
     sendRestaurantOrderPushSafe(effectiveOrder, eventType);
 
+    void enqueueOrderPlacedEmails(effectiveOrder, {
+      autoAccepted: Boolean(autoAcceptedOrder),
+    }).catch((error) => {
+      console.warn("[order] email enqueue failed:", error.message);
+    });
+
     return res.status(201).json({
       success: true,
       order: serializeOrder(effectiveOrder),
       autoAccepted: Boolean(autoAcceptedOrder),
+      accountCreated: Boolean(session),
+      token: session?.token,
+      user: session?.user,
     });
   } catch (error) {
     if (error?.code === "scheduled_time_required" || error?.code === "scheduled_time_too_soon" || error?.code === "scheduled_time_too_far") {
@@ -819,6 +864,10 @@ exports.rejectOrder = async (req, res) => {
       }
     );
 
+    void enqueueOrderRejectedEmail(order, reason).catch((error) => {
+      console.warn("[order] reject email failed:", error.message);
+    });
+
     return res.json({ success: true, order: serializeOrder(order) });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Failed to reject order" });
@@ -892,6 +941,12 @@ exports.updateOrderStatus = async (req, res) => {
       order: serializeOrder(updated),
       playTone: false,
     });
+
+    if (nextStatus === "delivered") {
+      void issueReviewInvite(updated).catch((error) => {
+        console.warn("[order] review invite failed:", error.message);
+      });
+    }
 
     return res.json({ success: true, order: serializeOrder(updated) });
   } catch (error) {
